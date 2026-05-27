@@ -10,7 +10,6 @@ const resultText=document.getElementById('resultText');
 let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
 
-// Camera / world settings
 const ZONE_W=240;
 const CANNON_WORLD_X=-1200;
 function dpr(){return devicePixelRatio||1;}
@@ -30,7 +29,7 @@ const defaults=[
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
 
-// ---- AUDIO ENGINE ----
+// ---- AUDIO ----
 function getAC(){
   const AC=window.AudioContext||window.webkitAudioContext;
   getAC._ac=getAC._ac||new AC();
@@ -128,26 +127,24 @@ function buildUI(){
 }
 
 // ---- WORLD HELPERS ----
-function worldToScreen(wx){return wx - camX;}
+function worldToScreen(wx){return wx-camX;}
 function zoneStartWorld(i){return i*ZONE_W*dpr();}
 function zoneForWorldX(wx){
   const idx=Math.floor(wx/(ZONE_W*dpr()));
   return Math.max(0,Math.min(zones.length-1,idx));
 }
+function rnd(min,max){return min+Math.random()*(max-min);}
 
-// ---- BIG RESULT above the landing zone ----
-function showResult(z, zIdx){
+// ---- RESULT OVERLAY ----
+function showResult(z,zIdx){
   if(resultTimer)clearTimeout(resultTimer);
-  const name=z.name||'';
-  const amt=z.amount||'';
-  resultText.innerHTML=`<span class="res-name">${name}</span><br><span class="res-amt">${amt}</span>`;
-  lastResult.textContent=`${name} → ${amt}`;
+  resultText.innerHTML=`<span class="res-name">${z.name||''}</span><br><span class="res-amt">${z.amount||''}</span>`;
+  lastResult.textContent=`${z.name||''} → ${z.amount||''}`;
   const zoneCenterWorld=zoneStartWorld(zIdx)+(ZONE_W*dpr()/2);
   const sx=worldToScreen(zoneCenterWorld);
-  const overlayW=Math.min(320*dpr(), canvas.width*0.9);
-  const left=Math.max(8, Math.min(canvas.width-overlayW-8, sx - overlayW/2));
-  const groundY=canvas.height-40*dpr();
-  const top=Math.max(16, groundY - 180*dpr());
+  const overlayW=Math.min(320*dpr(),canvas.width*0.9);
+  const left=Math.max(8,Math.min(canvas.width-overlayW-8,sx-overlayW/2));
+  const top=Math.max(16,canvas.height-40*dpr()-180*dpr());
   resultText.style.left=`${left/dpr()}px`;
   resultText.style.top=`${top/dpr()}px`;
   resultText.style.width=`${overlayW/dpr()}px`;
@@ -155,10 +152,11 @@ function showResult(z, zIdx){
   resultTimer=setTimeout(()=>resultOverlay.classList.add('hidden'),4500);
 }
 
-// ---- GAME LOGIC ----
-// rnd(min,max) — inclusive float between min and max
-function rnd(min,max){return min+Math.random()*(max-min);}
-
+// ---- LAUNCH ----
+// Strategy: pick a random target zone FIRST, compute the exact vx needed to
+// reach the centre of that zone in one parabolic arc, then add a small scatter
+// so it doesn't always land dead-centre. This guarantees every zone is
+// reachable and the pig NEVER hits the far wall.
 function launch(){
   if(running)return;
   running=true;
@@ -166,45 +164,47 @@ function launch(){
   sndLaunch();
   setTimeout(sndOink,120);
   lastResult.textContent='Launched! 🐷';
+
   const h=canvas.height;
+  const ground=h-40*dpr();
   const startWX=CANNON_WORLD_X*dpr()+175*dpr();
-  const totalZoneWidth=zones.length*ZONE_W*dpr();
+  const startY=h-92*dpr();
 
-  // Base speed that would reach the middle of all zones
-  const baseVx=(totalZoneWidth/(canvas.height*0.065))*dpr()*0.58;
+  // 1. Pick a random target zone (uniform across all zones)
+  const targetZone=Math.floor(Math.random()*zones.length);
 
-  // Randomize: spread across 40%–130% of base so the pig can land anywhere
-  const vxMult=rnd(0.40, 1.30);
-  const vx=Math.max(10*dpr(), baseVx*vxMult);
+  // 2. Pick a random landing X within the middle 60% of that zone
+  const zoneLeft=zoneStartWorld(targetZone);
+  const margin=ZONE_W*dpr()*0.2;
+  const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*dpr()-margin);
 
-  // Randomize vertical launch angle so arc height varies
-  const vy=rnd(-19,-10)*dpr();
-
-  // Small random horizontal nudge applied mid-flight (stored, applied each bounce)
-  const lateralBias=rnd(-0.8,0.8)*dpr();
+  // 3. Pick a random launch angle (vy) and derive vx from projectile formula.
+  //    y(t) = startY + vy*t + 0.5*g*t^2 = ground  =>  solve for t at landing
+  //    x(t) = startWX + vx*t = targetWX  =>  vx = (targetWX - startWX) / t
+  const g=0.45*dpr();           // must match update() gravity
+  const vy0=rnd(-18,-11)*dpr(); // random arc height
+  // Quadratic: 0.5*g*t^2 + vy0*t + (startY-ground) = 0
+  const a=0.5*g, b=vy0, c=startY-ground;
+  const disc=b*b-4*a*c;
+  const t=(-b+Math.sqrt(disc))/(2*a);  // positive root = time to hit ground
+  const vx=(targetWX-startWX)/t;
 
   pig={
-    wx:startWX,
-    y:h-92*dpr(),
-    vx,
-    vy,
-    r:18*dpr(),
-    spin:0,
-    trail:[],
-    lateralBias,   // per-launch drift applied on each ground bounce
-    bounces:0      // count bounces so we can add chaos early
+    wx:startWX, y:startY,
+    vx, vy:vy0,
+    r:18*dpr(), spin:0, trail:[],
+    bounces:0
   };
   camX=CANNON_WORLD_X*dpr();
   targetCamX=camX;
 }
 
+// ---- UPDATE ----
 function update(){
   const h=canvas.height,ground=h-40*dpr();
   sparkles=sparkles.filter(s=>s.life>0);
   sparkles.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.vy+=0.18*dpr();s.life--;});
-  if(pig){
-    targetCamX=pig.wx - canvas.width*0.38;
-  }
+  if(pig) targetCamX=pig.wx-canvas.width*0.38;
   camX+=(targetCamX-camX)*0.07;
   if(!pig)return;
 
@@ -215,27 +215,22 @@ function update(){
   pig.trail.push({wx:pig.wx,y:pig.y,life:22});
   pig.trail=pig.trail.slice(-22);
 
+  // Wall guards (safety net only — should rarely trigger now)
   const maxWX=zones.length*ZONE_W*dpr();
-  if(pig.wx+pig.r>maxWX){pig.vx*=-0.88;pig.wx=maxWX-pig.r;sndBounce();}
-  if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.88;pig.wx=pig.r;}
+  if(pig.wx+pig.r>maxWX){pig.vx*=-0.7;pig.wx=maxWX-pig.r;sndBounce();}
+  if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.7;pig.wx=pig.r;}
 
   if(pig.y+pig.r>ground){
     pig.y=ground-pig.r;
-    pig.vy*=-0.7;
-    pig.vx*=0.93;
+    pig.vy*=-0.62;
+    pig.vx*=0.80;
     pig.bounces++;
-
-    // On each bounce add a small random lateral kick so the pig doesn't
-    // always decelerate to a stop in the same spot
-    const chaos=rnd(-1.2,1.2)*dpr();
-    pig.vx+=pig.lateralBias + chaos*(1/(pig.bounces+1));
-
+    // tiny random scatter on each bounce so it looks natural
+    pig.vx+=rnd(-0.4,0.4)*dpr();
     sndBounce();
-
     if(Math.abs(pig.vy)<1.2*dpr()&&Math.abs(pig.vx)<0.7*dpr()){
       const zIdx=zoneForWorldX(pig.wx);
-      const z=zones[zIdx];
-      showResult(z, zIdx);
+      showResult(zones[zIdx],zIdx);
       sndWin();
       for(let i=0;i<32;i++)
         sparkles.push({
@@ -250,7 +245,7 @@ function update(){
   }
 }
 
-// ---- DRAWING ----
+// ---- DRAW ----
 function draw(){
   const w=canvas.width,h=canvas.height,ground=h-40*dpr();
   ctx.clearRect(0,0,w,h);
@@ -279,10 +274,8 @@ function draw(){
   ctx.fillStyle='rgba(255,255,255,.15)';
   ctx.fillRect(0,ground-8*dpr(),w,8*dpr());
   const borderColors=['#ff66b8','#5ad0ff','#cc66ff','#ffdd55','#55ffcc','#ff8855'];
-  const zoneColors=[
-    'rgba(255,102,184,.25)','rgba(90,208,255,.22)','rgba(160,80,255,.22)',
-    'rgba(255,220,50,.18)','rgba(50,255,180,.18)','rgba(255,130,70,.18)'
-  ];
+  const zoneColors=['rgba(255,102,184,.25)','rgba(90,208,255,.22)','rgba(160,80,255,.22)',
+    'rgba(255,220,50,.18)','rgba(50,255,180,.18)','rgba(255,130,70,.18)'];
   for(let i=0;i<zones.length;i++){
     const sx=worldToScreen(zoneStartWorld(i));
     const zw=ZONE_W*dpr();
@@ -328,9 +321,7 @@ function draw(){
       const tx=worldToScreen(t.wx);
       ctx.globalAlpha=t.life/22*0.35;
       ctx.fillStyle=t.life/22>0.5?'#ff66b8':'#5ad0ff';
-      ctx.beginPath();
-      ctx.arc(tx,t.y,5*dpr()*(t.life/22),0,Math.PI*2);
-      ctx.fill();
+      ctx.beginPath();ctx.arc(tx,t.y,5*dpr()*(t.life/22),0,Math.PI*2);ctx.fill();
     });
     ctx.globalAlpha=1;
     ctx.save();
@@ -351,7 +342,6 @@ function draw(){
 }
 function loop(){update();draw();requestAnimationFrame(loop);}
 loop();
-// ---- CONTROLS ----
 launchBtn.onclick=()=>{getAC();launch();};
 soundBtn.onclick=()=>{soundOn=!soundOn;soundBtn.textContent=`Sound: ${soundOn?'On':'Off'}`;};
 togglePanelBtn.onclick=()=>{
