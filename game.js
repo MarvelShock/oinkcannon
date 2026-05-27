@@ -11,22 +11,21 @@ let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
 
 // Camera / world settings
-const ZONE_W=240;           // wider zones so they feel spread out
-const CANNON_WORLD_X=-1200; // cannon far left, zones start well off-screen
+const ZONE_W=240;
+const CANNON_WORLD_X=-1200;
 function dpr(){return devicePixelRatio||1;}
 function resize(){canvas.width=canvas.clientWidth*dpr();canvas.height=canvas.clientHeight*dpr();}
 window.addEventListener('resize',resize);resize();
-// Start camera showing the cannon area
 let camX=CANNON_WORLD_X*dpr();
 let targetCamX=camX;
 
 const defaults=[
-  {name:'5 Subs',        amount:'🎉 5 Subs',           sub:['5','5','5','5','5']},
-  {name:'10 Subs',       amount:'🎊 10 Subs',          sub:['10','10','10','10','10']},
-  {name:'15 Subs',       amount:'✨ 15 Subs',           sub:['15','15','15','15','15']},
-  {name:'25 Subs',       amount:'🐷 25 Subs',          sub:['25','25','25','25','25']},
-  {name:'Gift Your Age', amount:'🎂 Gift Your Age',    sub:['age','age','age','age','age']},
-  {name:'Pushup Gifting',amount:'💪 Gift = Your Pushups',sub:['pushups','pushups','pushups','pushups','pushups']}
+  {name:'5 Subs',        amount:'🎉 5 Subs',              sub:['5','5','5','5','5']},
+  {name:'10 Subs',       amount:'🎊 10 Subs',             sub:['10','10','10','10','10']},
+  {name:'15 Subs',       amount:'✨ 15 Subs',              sub:['15','15','15','15','15']},
+  {name:'25 Subs',       amount:'🐷 25 Subs',             sub:['25','25','25','25','25']},
+  {name:'Gift Your Age', amount:'🎂 Gift Your Age',       sub:['age','age','age','age','age']},
+  {name:'Pushup Gifting',amount:'💪 Gift = Your Pushups', sub:['pushups','pushups','pushups','pushups','pushups']}
 ];
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
@@ -111,13 +110,11 @@ function buildUI(){
     };
     zonesUI.appendChild(box);
   });
-  // Add Zone button
   const addBtn=document.createElement('button');
   addBtn.className='btn';addBtn.textContent='+ Add Zone';
   addBtn.style.cssText='margin-top:8px;width:100%;';
   addBtn.onclick=()=>{zones.push({name:'New Zone',amount:'x1',sub:['','','','','']});saveZones();buildUI();};
   zonesUI.appendChild(addBtn);
-  // Reset to defaults button
   const resetBtn=document.createElement('button');
   resetBtn.className='btn mini';resetBtn.textContent='🔄 Reset to Defaults';
   resetBtn.style.cssText='margin-top:8px;width:100%;opacity:.7;';
@@ -143,10 +140,8 @@ function showResult(z, zIdx){
   if(resultTimer)clearTimeout(resultTimer);
   const name=z.name||'';
   const amt=z.amount||'';
-  // Two lines of text
   resultText.innerHTML=`<span class="res-name">${name}</span><br><span class="res-amt">${amt}</span>`;
   lastResult.textContent=`${name} → ${amt}`;
-  // Position above the landing zone centre
   const zoneCenterWorld=zoneStartWorld(zIdx)+(ZONE_W*dpr()/2);
   const sx=worldToScreen(zoneCenterWorld);
   const overlayW=Math.min(320*dpr(), canvas.width*0.9);
@@ -161,6 +156,9 @@ function showResult(z, zIdx){
 }
 
 // ---- GAME LOGIC ----
+// rnd(min,max) — inclusive float between min and max
+function rnd(min,max){return min+Math.random()*(max-min);}
+
 function launch(){
   if(running)return;
   running=true;
@@ -171,10 +169,31 @@ function launch(){
   const h=canvas.height;
   const startWX=CANNON_WORLD_X*dpr()+175*dpr();
   const totalZoneWidth=zones.length*ZONE_W*dpr();
-  // Scale velocity so pig reliably reaches all zones
-  const vx=Math.max(14,(totalZoneWidth/(canvas.height*0.065)))*dpr()*0.58;
-  pig={wx:startWX,y:h-92*dpr(),vx:vx,vy:-15*dpr(),r:18*dpr(),spin:0,trail:[]};
-  // Camera starts on cannon, then follows pig
+
+  // Base speed that would reach the middle of all zones
+  const baseVx=(totalZoneWidth/(canvas.height*0.065))*dpr()*0.58;
+
+  // Randomize: spread across 40%–130% of base so the pig can land anywhere
+  const vxMult=rnd(0.40, 1.30);
+  const vx=Math.max(10*dpr(), baseVx*vxMult);
+
+  // Randomize vertical launch angle so arc height varies
+  const vy=rnd(-19,-10)*dpr();
+
+  // Small random horizontal nudge applied mid-flight (stored, applied each bounce)
+  const lateralBias=rnd(-0.8,0.8)*dpr();
+
+  pig={
+    wx:startWX,
+    y:h-92*dpr(),
+    vx,
+    vy,
+    r:18*dpr(),
+    spin:0,
+    trail:[],
+    lateralBias,   // per-launch drift applied on each ground bounce
+    bounces:0      // count bounces so we can add chaos early
+  };
   camX=CANNON_WORLD_X*dpr();
   targetCamX=camX;
 }
@@ -188,20 +207,31 @@ function update(){
   }
   camX+=(targetCamX-camX)*0.07;
   if(!pig)return;
+
   pig.vy+=0.45*dpr();
   pig.wx+=pig.vx;
   pig.y+=pig.vy;
   pig.spin+=pig.vx*0.08;
   pig.trail.push({wx:pig.wx,y:pig.y,life:22});
   pig.trail=pig.trail.slice(-22);
+
   const maxWX=zones.length*ZONE_W*dpr();
   if(pig.wx+pig.r>maxWX){pig.vx*=-0.88;pig.wx=maxWX-pig.r;sndBounce();}
   if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.88;pig.wx=pig.r;}
+
   if(pig.y+pig.r>ground){
     pig.y=ground-pig.r;
     pig.vy*=-0.7;
     pig.vx*=0.93;
+    pig.bounces++;
+
+    // On each bounce add a small random lateral kick so the pig doesn't
+    // always decelerate to a stop in the same spot
+    const chaos=rnd(-1.2,1.2)*dpr();
+    pig.vx+=pig.lateralBias + chaos*(1/(pig.bounces+1));
+
     sndBounce();
+
     if(Math.abs(pig.vy)<1.2*dpr()&&Math.abs(pig.vx)<0.7*dpr()){
       const zIdx=zoneForWorldX(pig.wx);
       const z=zones[zIdx];
@@ -224,28 +254,23 @@ function update(){
 function draw(){
   const w=canvas.width,h=canvas.height,ground=h-40*dpr();
   ctx.clearRect(0,0,w,h);
-  // Background
   const bg=ctx.createLinearGradient(0,0,0,h);
   bg.addColorStop(0,'#1a0828');
   bg.addColorStop(0.5,'#090f20');
   bg.addColorStop(1,'#040710');
   ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
-  // Pink glow top-left
   const glowL=ctx.createRadialGradient(0,0,0,0,0,w*0.6);
   glowL.addColorStop(0,'rgba(255,102,184,.13)');
   glowL.addColorStop(1,'transparent');
   ctx.fillStyle=glowL;ctx.fillRect(0,0,w,h);
-  // Blue glow bottom-right
   const glowR=ctx.createRadialGradient(w,h,0,w,h,w*0.65);
   glowR.addColorStop(0,'rgba(90,208,255,.11)');
   glowR.addColorStop(1,'transparent');
   ctx.fillStyle=glowR;ctx.fillRect(0,0,w,h);
-  // Stars
   ctx.fillStyle='rgba(255,255,255,.55)';
   [[0.08,0.12],[0.22,0.05],[0.45,0.09],[0.6,0.03],[0.73,0.14],[0.88,0.07],
    [0.15,0.25],[0.52,0.18],[0.81,0.22],[0.35,0.31],[0.95,0.16],[0.29,0.08]]
   .forEach(([rx,ry])=>{ctx.beginPath();ctx.arc(rx*w,ry*h,1.5*dpr(),0,Math.PI*2);ctx.fill();});
-  // Grass
   const grass=ctx.createLinearGradient(0,ground,0,h);
   grass.addColorStop(0,'#59d56e');
   grass.addColorStop(0.5,'#3aa955');
@@ -253,7 +278,6 @@ function draw(){
   ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
   ctx.fillStyle='rgba(255,255,255,.15)';
   ctx.fillRect(0,ground-8*dpr(),w,8*dpr());
-  // Landing zones
   const borderColors=['#ff66b8','#5ad0ff','#cc66ff','#ffdd55','#55ffcc','#ff8855'];
   const zoneColors=[
     'rgba(255,102,184,.25)','rgba(90,208,255,.22)','rgba(160,80,255,.22)',
@@ -262,7 +286,6 @@ function draw(){
   for(let i=0;i<zones.length;i++){
     const sx=worldToScreen(zoneStartWorld(i));
     const zw=ZONE_W*dpr();
-    // Skip offscreen zones
     if(sx+zw<0||sx>w)continue;
     ctx.fillStyle=zoneColors[i%zoneColors.length];
     ctx.fillRect(sx,ground,zw,40*dpr());
@@ -279,7 +302,6 @@ function draw(){
     ctx.fillStyle=borderColors[i%borderColors.length];
     ctx.fillText(zones[i].amount,sx+zw/2,ground+33*dpr());
   }
-  // Cannon
   const cannonSX=worldToScreen(CANNON_WORLD_X*dpr());
   ctx.save();
   ctx.shadowColor='rgba(255,102,184,.5)';ctx.shadowBlur=18*dpr();
@@ -301,7 +323,6 @@ function draw(){
   ctx.fillStyle='rgba(90,208,255,.5)';
   ctx.fillRect(cannonSX+108*dpr(),h-124*dpr(),20*dpr(),8*dpr());
   ctx.restore();
-  // Pig
   if(pig){
     pig.trail.forEach(t=>{
       const tx=worldToScreen(t.wx);
@@ -321,7 +342,6 @@ function draw(){
     ctx.fillText('🐷',0,0);
     ctx.restore();
   }
-  // Sparkles
   sparkles.forEach(s=>{
     ctx.globalAlpha=Math.max(0,s.life/55);
     ctx.fillStyle=s.color||'#5ad0ff';
