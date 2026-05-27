@@ -5,27 +5,27 @@ const soundBtn=document.getElementById('soundBtn');
 const launchBtn=document.getElementById('launchBtn');
 const togglePanelBtn=document.getElementById('togglePanelBtn');
 const panel=document.getElementById('panel');
+const resultOverlay=document.getElementById('resultOverlay');
+const resultText=document.getElementById('resultText');
 let soundOn=true,running=false,pig=null,sparkles=[];
+let resultTimer=null;
 
 // Camera / world settings
-const ZONE_W=180;          // px per zone (world space, unscaled)
-const CANNON_WORLD_X=-600; // cannon sits far to the left of zone 0
-let camX=0;                // current camera scroll offset (world X of left edge)
+const ZONE_W=180;          // px per zone (world space, css pixels)
+const CANNON_WORLD_X=-600; // cannon sits far left of zone 0
+let camX=0;
 let targetCamX=0;
 
 const defaults=[
-  {name:'Tiny Oink',amount:'x1',sub:['5','10','15']},
-  {name:'Big Oink',amount:'x2',sub:['25','50','75']},
-  {name:'Mega Oink',amount:'x5',sub:['100','250','500']}
+  {name:'5 Subs',  amount:'🎉 5 Subs',  sub:['5','5','5']},
+  {name:'10 Subs', amount:'🎊 10 Subs', sub:['10','10','10']},
+  {name:'25 Subs', amount:'🐷 25 Subs', sub:['25','25','25']}
 ];
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
 function dpr(){return devicePixelRatio||1;}
 function resize(){canvas.width=canvas.clientWidth*dpr();canvas.height=canvas.clientHeight*dpr();}
 window.addEventListener('resize',resize);resize();
-
-// World width: cannon area + all zones
-function worldWidth(){return (-CANNON_WORLD_X)+zones.length*ZONE_W*dpr();}
 
 // ---- AUDIO ENGINE ----
 function getAC(){
@@ -72,21 +72,26 @@ function sndWin(){
   setTimeout(()=>sndOink(),420);
 }
 
-// ---- ZONE UI (with add/remove) ----
+// ---- ZONE UI ----
 function buildUI(){
   zonesUI.innerHTML='';
   zones.forEach((z,i)=>{
     const box=document.createElement('div');
     box.className='zonebox';
-    const subVals=(z.sub||[]).map((v,si)=>`<input data-sub="${si}" placeholder="Sub ${si+1}" value="${v||''}">`).join('');
+    const subs=(z.sub||[]);
+    const subInputs=subs.map((v,si)=>`<input data-sub="${si}" placeholder="Sub ${si+1}" value="${v||''}">`).join('');
     box.innerHTML=`
-      <div class="zonehead"><strong>Zone ${i+1}</strong><span class="gear">⚙️</span><button class="btn mini remove-zone" data-idx="${i}" title="Remove zone">🗑</button></div>
+      <div class="zonehead">
+        <strong>Zone ${i+1}</strong>
+        <span class="gear">⚙️</span>
+        <button class="btn mini remove-zone" data-idx="${i}" title="Remove">🗑</button>
+      </div>
       <div class="zonerows">
         <input data-k="name" value="${z.name}">
         <input data-k="amount" value="${z.amount}">
         <button class="btn mini" data-save>Save</button>
       </div>
-      <div class="zonerows sub" style="margin-top:8px;display:none">${subVals}</div>`;
+      <div class="zonerows sub" style="margin-top:8px;display:none">${subInputs}</div>`;
     const subRow=box.querySelector('.sub');
     box.querySelector('.gear').onclick=()=>subRow.style.display=subRow.style.display==='none'?'grid':'none';
     box.querySelector('[data-save]').onclick=()=>{
@@ -102,52 +107,46 @@ function buildUI(){
     };
     zonesUI.appendChild(box);
   });
-  // Add Zone button
   const addBtn=document.createElement('button');
   addBtn.className='btn';addBtn.textContent='+ Add Zone';
-  addBtn.style.marginTop='10px';
-  addBtn.onclick=()=>{
-    zones.push({name:'New Zone',amount:'x1',sub:['','','']});
-    saveZones();buildUI();
-  };
+  addBtn.style.cssText='margin-top:10px;width:100%;';
+  addBtn.onclick=()=>{zones.push({name:'New Zone',amount:'x1',sub:['','','']});saveZones();buildUI();};
   zonesUI.appendChild(addBtn);
 }
 
-// ---- WORLD <-> SCREEN HELPERS ----
-// World X: cannon at CANNON_WORLD_X*dpr(), zones start at 0
+// ---- WORLD HELPERS ----
 function worldToScreen(wx){return wx - camX;}
 function zoneStartWorld(i){return i*ZONE_W*dpr();}
-
-// Which zone does world X fall in?
 function zoneForWorldX(wx){
   const idx=Math.floor(wx/(ZONE_W*dpr()));
   return Math.max(0,Math.min(zones.length-1,idx));
+}
+
+// ---- BIG RESULT DISPLAY ----
+function showResult(z){
+  if(resultTimer)clearTimeout(resultTimer);
+  const name=z.name||'';
+  const amt=z.amount||'';
+  resultText.textContent=`${name}\n${amt}`;
+  // Also update the small badge
+  lastResult.textContent=`${name} ${amt} (${(z.sub||[]).join(' / ')})`;
+  resultOverlay.classList.remove('hidden');
+  resultTimer=setTimeout(()=>resultOverlay.classList.add('hidden'),4200);
 }
 
 // ---- GAME LOGIC ----
 function launch(){
   if(running)return;
   running=true;
+  resultOverlay.classList.add('hidden');
   sndLaunch();
   setTimeout(sndOink,120);
   lastResult.textContent='Launched! 🐷';
   const h=canvas.height;
-  const ground=h-40*dpr();
-  // Start pig at cannon muzzle in world space
   const startWX=CANNON_WORLD_X*dpr()+175*dpr();
-  // Give enough horizontal velocity to reach all zones
   const totalZoneWidth=zones.length*ZONE_W*dpr();
   const vx=Math.max(11,(totalZoneWidth/(canvas.height*0.08)))*dpr()*0.55;
-  pig={
-    wx:startWX,        // world X
-    y:h-92*dpr(),
-    vx:vx,
-    vy:-14*dpr(),
-    r:18*dpr(),
-    spin:0,
-    trail:[]
-  };
-  // Pan camera to show cannon at launch
+  pig={wx:startWX,y:h-92*dpr(),vx:vx,vy:-14*dpr(),r:18*dpr(),spin:0,trail:[]};
   targetCamX=CANNON_WORLD_X*dpr();
 }
 
@@ -155,15 +154,11 @@ function update(){
   const h=canvas.height,ground=h-40*dpr();
   sparkles=sparkles.filter(s=>s.life>0);
   sparkles.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.vy+=0.18*dpr();s.life--;});
-
-  // Smooth camera follow
   if(pig){
-    // Target: keep pig centred horizontally
     const desiredCamX=pig.wx - canvas.width*0.4;
     targetCamX=desiredCamX;
   }
   camX+=(targetCamX-camX)*0.08;
-
   if(!pig)return;
   pig.vy+=0.45*dpr();
   pig.wx+=pig.vx;
@@ -171,17 +166,9 @@ function update(){
   pig.spin+=pig.vx*0.08;
   pig.trail.push({wx:pig.wx,y:pig.y,life:20});
   pig.trail=pig.trail.slice(-20);
-
-  // Bounce off right world edge
   const maxWX=zones.length*ZONE_W*dpr();
-  if(pig.wx+pig.r>maxWX){
-    pig.vx*=-0.88;
-    pig.wx=maxWX-pig.r;
-    sndBounce();
-  }
-  // Don't bounce back before zone 0 left edge
+  if(pig.wx+pig.r>maxWX){pig.vx*=-0.88;pig.wx=maxWX-pig.r;sndBounce();}
   if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.88;pig.wx=pig.r;}
-
   if(pig.y+pig.r>ground){
     pig.y=ground-pig.r;
     pig.vy*=-0.7;
@@ -190,15 +177,15 @@ function update(){
     if(Math.abs(pig.vy)<1.2*dpr()&&Math.abs(pig.vx)<0.7*dpr()){
       const zIdx=zoneForWorldX(pig.wx);
       const z=zones[zIdx];
-      lastResult.textContent=`${z.name} ${z.amount} (${(z.sub||[]).join(' / ')})`;
+      showResult(z);
       sndWin();
-      for(let i=0;i<22;i++)
+      for(let i=0;i<28;i++)
         sparkles.push({
           x:worldToScreen(pig.wx),y:pig.y,
-          vx:(Math.random()-0.5)*6*dpr(),
-          vy:(Math.random()-0.9)*6*dpr(),
-          life:35+Math.random()*20,
-          color:Math.random()>.5?'#ff66b8':'#5ad0ff'
+          vx:(Math.random()-0.5)*7*dpr(),
+          vy:(Math.random()-0.9)*7*dpr(),
+          life:40+Math.random()*25,
+          color:Math.random()>.5?'#ff66b8':Math.random()>.5?'#5ad0ff':'#cc66ff'
         });
       pig=null;running=false;
     }
@@ -209,54 +196,89 @@ function update(){
 function draw(){
   const w=canvas.width,h=canvas.height,ground=h-40*dpr();
   ctx.clearRect(0,0,w,h);
-  // Background
-  const bg=ctx.createLinearGradient(0,0,w,h);
-  bg.addColorStop(0,'rgba(255,102,184,.10)');
-  bg.addColorStop(1,'rgba(90,208,255,.10)');
+
+  // Deep purple-pink-blue background gradient
+  const bg=ctx.createLinearGradient(0,0,0,h);
+  bg.addColorStop(0,'#1a0828');
+  bg.addColorStop(0.5,'#090f20');
+  bg.addColorStop(1,'#040710');
   ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
 
-  // Ground strip (full screen width)
-  const grass=ctx.createLinearGradient(0,ground,w,h);
+  // Subtle radial pink glow top-left
+  const glowL=ctx.createRadialGradient(0,0,0,0,0,w*0.6);
+  glowL.addColorStop(0,'rgba(255,102,184,.13)');
+  glowL.addColorStop(1,'transparent');
+  ctx.fillStyle=glowL;ctx.fillRect(0,0,w,h);
+
+  // Subtle blue glow bottom-right
+  const glowR=ctx.createRadialGradient(w,h,0,w,h,w*0.65);
+  glowR.addColorStop(0,'rgba(90,208,255,.11)');
+  glowR.addColorStop(1,'transparent');
+  ctx.fillStyle=glowR;ctx.fillRect(0,0,w,h);
+
+  // Stars / particles in background
+  ctx.fillStyle='rgba(255,255,255,.55)';
+  const stars=[[0.08,0.12],[0.22,0.05],[0.45,0.09],[0.6,0.03],[0.73,0.14],[0.88,0.07],[0.15,0.25],[0.52,0.18],[0.81,0.22],[0.35,0.31]];
+  stars.forEach(([rx,ry])=>{ctx.beginPath();ctx.arc(rx*w,ry*h,1.5*dpr(),0,Math.PI*2);ctx.fill();});
+
+  // Grass
+  const grass=ctx.createLinearGradient(0,ground,0,h);
   grass.addColorStop(0,'#59d56e');
-  grass.addColorStop(0.55,'#3aa955');
+  grass.addColorStop(0.5,'#3aa955');
   grass.addColorStop(1,'#1f6b35');
   ctx.fillStyle=grass;ctx.fillRect(0,ground,w,h-ground);
-  ctx.fillStyle='rgba(255,255,255,.18)';
+  ctx.fillStyle='rgba(255,255,255,.15)';
   ctx.fillRect(0,ground-8*dpr(),w,8*dpr());
 
   // Landing zones (camera-scrolled)
+  const pinkZone='rgba(255,102,184,.25)';
+  const blueZone='rgba(90,208,255,.22)';
+  const purpZone='rgba(160,80,255,.22)';
+  const zoneColors=[pinkZone,blueZone,purpZone];
   for(let i=0;i<zones.length;i++){
     const sx=worldToScreen(zoneStartWorld(i));
     const zw=ZONE_W*dpr();
-    ctx.fillStyle=i%2?'rgba(90,208,255,.22)':'rgba(255,102,184,.22)';
+    ctx.fillStyle=zoneColors[i%3];
     ctx.fillRect(sx,ground,zw,40*dpr());
-    ctx.strokeStyle='rgba(255,255,255,.25)';
+    // Glowing top border per zone
+    const borderColors=['#ff66b8','#5ad0ff','#cc66ff'];
+    ctx.strokeStyle=borderColors[i%3];
+    ctx.lineWidth=2*dpr();
+    ctx.beginPath();ctx.moveTo(sx,ground);ctx.lineTo(sx+zw,ground);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.12)';
+    ctx.lineWidth=1*dpr();
     ctx.strokeRect(sx,ground,zw,40*dpr());
+    // Zone name
     ctx.fillStyle='#fff';ctx.textAlign='center';
-    ctx.font=`bold ${14*dpr()}px system-ui`;
+    ctx.font=`bold ${13*dpr()}px system-ui`;
     ctx.fillText(zones[i].name,sx+zw/2,ground+17*dpr());
-    ctx.font=`${13*dpr()}px system-ui`;ctx.fillStyle='#e8fff0';
+    ctx.font=`${12*dpr()}px system-ui`;
+    ctx.fillStyle=borderColors[i%3];
     ctx.fillText(zones[i].amount,sx+zw/2,ground+33*dpr());
   }
 
   // Cannon (camera-scrolled)
   const cannonSX=worldToScreen(CANNON_WORLD_X*dpr());
   ctx.save();
-  ctx.fillStyle='rgba(255,255,255,.08)';
-  ctx.strokeStyle='rgba(255,255,255,.22)';
+  // Cannon body glow
+  ctx.shadowColor='rgba(255,102,184,.5)';ctx.shadowBlur=18*dpr();
+  ctx.fillStyle='rgba(255,102,184,.12)';
+  ctx.strokeStyle='rgba(255,102,184,.6)';
   ctx.lineWidth=2*dpr();
   ctx.beginPath();
   ctx.roundRect(cannonSX+28*dpr(),h-155*dpr(),110*dpr(),85*dpr(),18*dpr());
   ctx.fill();ctx.stroke();
+  ctx.shadowBlur=0;
   ctx.font=`${22*dpr()}px serif`;ctx.textAlign='center';
   ctx.fillText('🐷',cannonSX+83*dpr(),h-116*dpr());
+  // Barrel
   ctx.fillStyle='rgba(255,255,255,.92)';
   ctx.beginPath();
   ctx.moveTo(cannonSX+120*dpr(),h-128*dpr());
   ctx.lineTo(cannonSX+175*dpr(),h-120*dpr());
   ctx.lineTo(cannonSX+120*dpr(),h-112*dpr());
   ctx.closePath();ctx.fill();
-  ctx.fillStyle='rgba(90,208,255,.45)';
+  ctx.fillStyle='rgba(90,208,255,.5)';
   ctx.fillRect(cannonSX+108*dpr(),h-124*dpr(),20*dpr(),8*dpr());
   ctx.restore();
 
@@ -264,14 +286,18 @@ function draw(){
   if(pig){
     pig.trail.forEach(t=>{
       const tx=worldToScreen(t.wx);
-      ctx.globalAlpha=t.life/20*0.3;
-      ctx.fillStyle='#ff7cc9';
+      ctx.globalAlpha=t.life/20*0.35;
+      // Pink-to-blue gradient trail dots
+      const ratio=t.life/20;
+      ctx.fillStyle=ratio>0.5?'#ff66b8':'#5ad0ff';
       ctx.beginPath();
       ctx.arc(tx,t.y,5*dpr()*(t.life/20),0,Math.PI*2);
       ctx.fill();
     });
     ctx.globalAlpha=1;
     ctx.save();
+    // Glow around flying pig
+    ctx.shadowColor='rgba(255,102,184,.7)';ctx.shadowBlur=14*dpr();
     ctx.translate(worldToScreen(pig.wx),pig.y);
     ctx.rotate(pig.spin);
     ctx.font=`${pig.r*2.2}px serif`;
@@ -280,14 +306,16 @@ function draw(){
     ctx.restore();
   }
 
-  // Sparkles (already in screen space)
+  // Sparkles (screen space)
   sparkles.forEach(s=>{
     ctx.globalAlpha=Math.max(0,s.life/55);
     ctx.fillStyle=s.color||'#5ad0ff';
-    ctx.fillRect(s.x,s.y,3.5*dpr(),3.5*dpr());
+    // Sparkle as a small star
+    ctx.fillRect(s.x-2*dpr(),s.y-2*dpr(),4*dpr(),4*dpr());
   });
   ctx.globalAlpha=1;
 }
+
 function loop(){update();draw();requestAnimationFrame(loop);}
 loop();
 

@@ -3,29 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Oink Cannon</title>
+  <title>TheNicoleT Oink Cannon</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
     <div class="topbar">
-      <div class="title">OINK CANNON</div>
+      <div class="title">
+        <span class="title-nicole">TheNicoleT</span>
+        <span class="title-oink"> Oink Cannon 🐷</span>
+      </div>
       <div class="hud">
         <div class="badge" id="lastResult">Ready</div>
         <button class="btn mini" id="togglePanelBtn">Hide Customize</button>
         <button class="btn mini" id="soundBtn">Sound: On</button>
-        <button class="btn launch" id="launchBtn">Launch Pig</button>
+        <button class="btn launch" id="launchBtn">🚀 Launch Pig</button>
       </div>
     </div>
     <div class="main">
       <div class="panel" id="panel">
-        <h2>Customize landing zones</h2>
-        <p>Edit the label and payout for each zone. Use the gear to reveal the sub-amounts for that landing zone.</p>
+        <h2>🎨 Customize Landing Zones</h2>
+        <p>Edit the label and reward for each zone. Use ⚙️ to reveal sub-amounts. Add or remove zones freely!</p>
         <div id="zonesUI"></div>
         <div class="footerhint">The pig oinks when launched, bounces on the stage, and lands in a zone based on where it settles.</div>
       </div>
       <div class="gamewrap">
         <canvas id="game"></canvas>
+        <!-- Big result overlay shown on landing -->
+        <div id="resultOverlay" class="result-overlay hidden">
+          <div id="resultText" class="result-text"></div>
+        </div>
         <div class="overlay"><div class="aim"></div></div>
       </div>
     </div>
