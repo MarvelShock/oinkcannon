@@ -153,10 +153,6 @@ function showResult(z,zIdx){
 }
 
 // ---- LAUNCH ----
-// Strategy: pick a random target zone FIRST, compute the exact vx needed to
-// reach the centre of that zone in one parabolic arc, then add a small scatter
-// so it doesn't always land dead-centre. This guarantees every zone is
-// reachable and the pig NEVER hits the far wall.
 function launch(){
   if(running)return;
   running=true;
@@ -170,23 +166,16 @@ function launch(){
   const startWX=CANNON_WORLD_X*dpr()+175*dpr();
   const startY=h-92*dpr();
 
-  // 1. Pick a random target zone (uniform across all zones)
   const targetZone=Math.floor(Math.random()*zones.length);
-
-  // 2. Pick a random landing X within the middle 60% of that zone
   const zoneLeft=zoneStartWorld(targetZone);
   const margin=ZONE_W*dpr()*0.2;
   const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*dpr()-margin);
 
-  // 3. Pick a random launch angle (vy) and derive vx from projectile formula.
-  //    y(t) = startY + vy*t + 0.5*g*t^2 = ground  =>  solve for t at landing
-  //    x(t) = startWX + vx*t = targetWX  =>  vx = (targetWX - startWX) / t
-  const g=0.28*dpr();           // must match update() gravity
-  const vy0=rnd(-12,-7)*dpr(); // random arc height
-  // Quadratic: 0.5*g*t^2 + vy0*t + (startY-ground) = 0
+  const g=0.14*dpr();           // must match update() gravity
+  const vy0=rnd(-7,-4)*dpr();   // slow-mo arc height
   const a=0.5*g, b=vy0, c=startY-ground;
   const disc=b*b-4*a*c;
-  const t=(-b+Math.sqrt(disc))/(2*a);  // positive root = time to hit ground
+  const t=(-b+Math.sqrt(disc))/(2*a);
   const vx=(targetWX-startWX)/t;
 
   pig={
@@ -203,19 +192,18 @@ function launch(){
 function update(){
   const h=canvas.height,ground=h-40*dpr();
   sparkles=sparkles.filter(s=>s.life>0);
-  sparkles.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.vy+=0.18*dpr();s.life--;});
+  sparkles.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.vy+=0.07*dpr();s.life--;});
   if(pig) targetCamX=pig.wx-canvas.width*0.38;
-  camX+=(targetCamX-camX)*0.07;
+  camX+=(targetCamX-camX)*0.04;
   if(!pig)return;
 
-  pig.vy+=0.28*dpr();
+  pig.vy+=0.14*dpr();
   pig.wx+=pig.vx;
   pig.y+=pig.vy;
   pig.spin+=pig.vx*0.08;
   pig.trail.push({wx:pig.wx,y:pig.y,life:22});
   pig.trail=pig.trail.slice(-22);
 
-  // Wall guards (safety net only — should rarely trigger now)
   const maxWX=zones.length*ZONE_W*dpr();
   if(pig.wx+pig.r>maxWX){pig.vx*=-0.7;pig.wx=maxWX-pig.r;sndBounce();}
   if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.7;pig.wx=pig.r;}
@@ -225,7 +213,6 @@ function update(){
     pig.vy*=-0.62;
     pig.vx*=0.80;
     pig.bounces++;
-    // tiny random scatter on each bounce so it looks natural
     pig.vx+=rnd(-0.4,0.4)*dpr();
     sndBounce();
     if(Math.abs(pig.vy)<1.2*dpr()&&Math.abs(pig.vx)<0.7*dpr()){
