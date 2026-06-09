@@ -152,6 +152,130 @@ function showResult(z,zIdx){
   resultTimer=setTimeout(()=>resultOverlay.classList.add('hidden'),4500);
 }
 
+// ---- DRAW CANNON ----
+// pivot = tip of barrel in world coords; draws behind it
+function drawCannon(sx, groundY) {
+  const d = dpr();
+  const angle = -0.32; // barrel angle upward (radians)
+  const barrelLen = 90*d;
+  const barrelW  = 28*d;
+  const baseR    = 36*d; // main body circle radius
+  const wheelR   = 22*d;
+
+  // pivot point = where barrel tip exits (launch point)
+  const tipX = sx + 175*d;
+  const tipY = groundY - 58*d;
+
+  // barrel base center (back of barrel)
+  const bx = tipX - Math.cos(angle)*barrelLen;
+  const by = tipY + Math.sin(angle)*barrelLen;
+
+  ctx.save();
+
+  // --- glow ---
+  ctx.shadowColor = 'rgba(255,102,184,.7)';
+  ctx.shadowBlur  = 20*d;
+
+  // --- barrel ---
+  ctx.save();
+  ctx.translate(tipX, tipY);
+  ctx.rotate(angle + Math.PI); // point barrel rightward
+  const barrelGrad = ctx.createLinearGradient(0,-barrelW/2, 0,barrelW/2);
+  barrelGrad.addColorStop(0,  '#cc55aa');
+  barrelGrad.addColorStop(0.4,'#ff66b8');
+  barrelGrad.addColorStop(1,  '#7a1a55');
+  ctx.fillStyle = barrelGrad;
+  // barrel body
+  ctx.beginPath();
+  ctx.roundRect(0, -barrelW/2, barrelLen, barrelW, [barrelW/2, 8*d, 8*d, barrelW/2]);
+  ctx.fill();
+  // barrel shine
+  ctx.fillStyle = 'rgba(255,255,255,.18)';
+  ctx.beginPath();
+  ctx.roundRect(6*d, -barrelW/2+4*d, barrelLen-12*d, barrelW*0.3, 4*d);
+  ctx.fill();
+  // muzzle ring
+  ctx.strokeStyle = '#ff9cd8';
+  ctx.lineWidth = 4*d;
+  ctx.beginPath();
+  ctx.arc(barrelLen, 0, barrelW/2+2*d, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.fillStyle = '#1a0828';
+  ctx.fill();
+  ctx.restore();
+
+  // --- cannon body (round base) ---
+  const bodyGrad = ctx.createRadialGradient(bx-8*d, by-8*d, 4*d, bx, by, baseR);
+  bodyGrad.addColorStop(0,  '#ff66b8');
+  bodyGrad.addColorStop(0.6,'#a0206a');
+  bodyGrad.addColorStop(1,  '#4a0830');
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.arc(bx, by, baseR, 0, Math.PI*2);
+  ctx.fill();
+  // body ring
+  ctx.strokeStyle = '#ff9cd8';
+  ctx.lineWidth = 3*d;
+  ctx.stroke();
+  // pig emoji on body
+  ctx.shadowBlur = 0;
+  ctx.font = `${22*d}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🐷', bx, by);
+
+  ctx.shadowColor = 'rgba(90,208,255,.5)';
+  ctx.shadowBlur  = 14*d;
+
+  // --- carriage / axle ---
+  const axleY = groundY - wheelR;
+  const axleX1 = bx - 30*d;
+  const axleX2 = bx + 28*d;
+  const carriageGrad = ctx.createLinearGradient(axleX1, 0, axleX2, 0);
+  carriageGrad.addColorStop(0, '#1a4a7a');
+  carriageGrad.addColorStop(0.5,'#5ad0ff');
+  carriageGrad.addColorStop(1, '#1a4a7a');
+  ctx.fillStyle = carriageGrad;
+  ctx.beginPath();
+  ctx.roundRect(axleX1, axleY - 8*d, axleX2-axleX1, 16*d, 6*d);
+  ctx.fill();
+
+  // --- wheels ---
+  function drawWheel(cx, cy) {
+    // outer tire
+    const wg = ctx.createRadialGradient(cx-wheelR*0.3, cy-wheelR*0.3, 2*d, cx, cy, wheelR);
+    wg.addColorStop(0,  '#4a9acc');
+    wg.addColorStop(0.7,'#1a5580');
+    wg.addColorStop(1,  '#0a2a40');
+    ctx.fillStyle = wg;
+    ctx.beginPath();
+    ctx.arc(cx, cy, wheelR, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#5ad0ff';
+    ctx.lineWidth = 3*d;
+    ctx.stroke();
+    // spokes
+    ctx.strokeStyle = 'rgba(90,208,255,.6)';
+    ctx.lineWidth = 2*d;
+    for(let s=0;s<6;s++){
+      const a = (s/6)*Math.PI*2;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.lineTo(cx+Math.cos(a)*(wheelR-4*d), cy+Math.sin(a)*(wheelR-4*d));
+      ctx.stroke();
+    }
+    // hub
+    ctx.fillStyle = '#5ad0ff';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6*d, 0, Math.PI*2);
+    ctx.fill();
+  }
+  drawWheel(axleX1 + 4*d, axleY);
+  drawWheel(axleX2 - 4*d, axleY);
+
+  ctx.restore();
+}
+
 // ---- LAUNCH ----
 function launch(){
   if(running)return;
@@ -164,15 +288,15 @@ function launch(){
   const h=canvas.height;
   const ground=h-40*dpr();
   const startWX=CANNON_WORLD_X*dpr()+175*dpr();
-  const startY=h-92*dpr();
+  const startY=h-58*dpr(); // matches barrel tip height
 
   const targetZone=Math.floor(Math.random()*zones.length);
   const zoneLeft=zoneStartWorld(targetZone);
   const margin=ZONE_W*dpr()*0.2;
   const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*dpr()-margin);
 
-  const g=0.07*dpr();           // reduced gravity for slower, floatier arc
-  const vy0=rnd(-4,-2.5)*dpr(); // slower upward launch speed
+  const g=0.04*dpr();           // very slow floaty gravity
+  const vy0=rnd(-3,-2)*dpr();   // gentle upward launch
   const a=0.5*g, b=vy0, c=startY-ground;
   const disc=b*b-4*a*c;
   const t=(-b+Math.sqrt(disc))/(2*a);
@@ -197,7 +321,7 @@ function update(){
   camX+=(targetCamX-camX)*0.04;
   if(!pig)return;
 
-  pig.vy+=0.07*dpr(); // match reduced gravity from launch()
+  pig.vy+=0.04*dpr(); // match gravity from launch()
   pig.wx+=pig.vx;
   pig.y+=pig.vy;
   pig.spin+=pig.vx*0.08;
@@ -282,27 +406,10 @@ function draw(){
     ctx.fillStyle=borderColors[i%borderColors.length];
     ctx.fillText(zones[i].amount,sx+zw/2,ground+33*dpr());
   }
-  const cannonSX=worldToScreen(CANNON_WORLD_X*dpr());
-  ctx.save();
-  ctx.shadowColor='rgba(255,102,184,.5)';ctx.shadowBlur=18*dpr();
-  ctx.fillStyle='rgba(255,102,184,.12)';
-  ctx.strokeStyle='rgba(255,102,184,.6)';
-  ctx.lineWidth=2*dpr();
-  ctx.beginPath();
-  ctx.roundRect(cannonSX+28*dpr(),h-155*dpr(),110*dpr(),85*dpr(),18*dpr());
-  ctx.fill();ctx.stroke();
-  ctx.shadowBlur=0;
-  ctx.font=`${22*dpr()}px serif`;ctx.textAlign='center';
-  ctx.fillText('🐷',cannonSX+83*dpr(),h-116*dpr());
-  ctx.fillStyle='rgba(255,255,255,.92)';
-  ctx.beginPath();
-  ctx.moveTo(cannonSX+120*dpr(),h-128*dpr());
-  ctx.lineTo(cannonSX+175*dpr(),h-120*dpr());
-  ctx.lineTo(cannonSX+120*dpr(),h-112*dpr());
-  ctx.closePath();ctx.fill();
-  ctx.fillStyle='rgba(90,208,255,.5)';
-  ctx.fillRect(cannonSX+108*dpr(),h-124*dpr(),20*dpr(),8*dpr());
-  ctx.restore();
+
+  // draw the real cannon
+  drawCannon(worldToScreen(CANNON_WORLD_X*dpr()), ground);
+
   if(pig){
     pig.trail.forEach(t=>{
       const tx=worldToScreen(t.wx);
