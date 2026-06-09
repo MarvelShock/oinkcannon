@@ -7,9 +7,13 @@ const togglePanelBtn=document.getElementById('togglePanelBtn');
 const panel=document.getElementById('panel');
 const resultOverlay=document.getElementById('resultOverlay');
 const resultText=document.getElementById('resultText');
+const twitchBtn=document.getElementById('twitchBtn');
+const twitchBar=document.getElementById('twitchBar');
+const twitchStatus=document.getElementById('twitchStatus');
+const twitchDisconnectBtn=document.getElementById('twitchDisconnectBtn');
 let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
-let holdCamFrames=0; // frames to keep camera locked on cannon after launch
+let holdCamFrames=0;
 
 const ZONE_W=240;
 const CANNON_WORLD_X=-320;
@@ -19,7 +23,6 @@ window.addEventListener('resize',resize);resize();
 let camX=CANNON_WORLD_X*dpr();
 let targetCamX=camX;
 
-// Pure world-space muzzle position — no screen coords involved
 function getMuzzleWorld(){
   const d=dpr();
   const h=canvas.height;
@@ -28,8 +31,6 @@ function getMuzzleWorld(){
   const wy=ground-wheelR;
   const angle=-0.30;
   const barrelLen=110*d;
-  // cannon screen anchor sx = worldToScreen(CANNON_WORLD_X*d)
-  // wx_screen = sx + 148*d  =>  wx_world = CANNON_WORLD_X*d + 148*d
   const wx_world = CANNON_WORLD_X*d + 148*d;
   const breechWX  = wx_world - 10*d;
   const breechY   = wy - 18*d;
@@ -48,6 +49,75 @@ const defaults=[
 ];
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
+
+// ---- TWITCH IRC ----
+const TWITCH_CLIENT_ID = 'f6q91oc8nmrz0a15413wbjuezzyr2v';
+const TWITCH_CHANNEL   = 'thenicolet';
+let twitchWS = null;
+let twitchPingInterval = null;
+// Queue: one launch pending at a time, 3s cooldown between launches
+let launchQueue = [];
+let launchCooldown = false;
+
+function twitchConnect(){
+  if(twitchWS && twitchWS.readyState < 2) return;
+  twitchWS = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+  twitchWS.onopen = () => {
+    twitchWS.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    // Anonymous read-only login — no OAuth needed for public chat
+    twitchWS.send('PASS SCHMOOPIIE');
+    twitchWS.send('NICK justinfan' + Math.floor(Math.random()*99999));
+    twitchWS.send('JOIN #' + TWITCH_CHANNEL);
+    twitchBar.classList.remove('hidden');
+    twitchStatus.textContent = '🟡 Connecting to #' + TWITCH_CHANNEL + '...';
+    twitchPingInterval = setInterval(()=>{ if(twitchWS.readyState===1) twitchWS.send('PING :tmi.twitch.tv'); }, 4*60*1000);
+  };
+  twitchWS.onmessage = (e) => {
+    const raw = e.data;
+    if(raw.includes('PING')) { twitchWS.send('PONG :tmi.twitch.tv'); return; }
+    if(raw.includes('366') || raw.includes('JOIN #' + TWITCH_CHANNEL)){
+      twitchStatus.textContent = '🟢 Live in #' + TWITCH_CHANNEL + ' — type !oink to launch!';
+      twitchBtn.textContent = '🟢 Twitch Live';
+    }
+    // Parse PRIVMSG
+    const privMatch = raw.match(/PRIVMSG #\S+ :(.+)/);
+    if(privMatch){
+      const msg = privMatch[1].trim().toLowerCase();
+      const userMatch = raw.match(/display-name=([^;]+)/);
+      const user = userMatch ? userMatch[1] : 'viewer';
+      if(msg === '!oink' || msg.startsWith('!oink ')){
+        queueLaunch(user);
+      }
+    }
+  };
+  twitchWS.onclose = () => {
+    twitchStatus.textContent = '🔴 Disconnected';
+    twitchBtn.textContent = '🟣 Connect Twitch';
+    clearInterval(twitchPingInterval);
+  };
+  twitchWS.onerror = () => {
+    twitchStatus.textContent = '🔴 Connection error';
+  };
+}
+
+function twitchDisconnect(){
+  if(twitchWS){ twitchWS.close(); twitchWS=null; }
+  clearInterval(twitchPingInterval);
+  twitchBar.classList.add('hidden');
+  twitchBtn.textContent = '🟣 Connect Twitch';
+}
+
+function queueLaunch(user){
+  if(launchCooldown) return; // one at a time, drop extras during cooldown
+  launchCooldown = true;
+  lastResult.textContent = user + ' fired the cannon! 🐷';
+  getAC();
+  launch();
+  setTimeout(()=>{ launchCooldown=false; }, 3500);
+}
+
+twitchBtn.onclick = twitchConnect;
+twitchDisconnectBtn.onclick = twitchDisconnect;
 
 // ---- AUDIO ----
 function getAC(){
@@ -190,10 +260,7 @@ function drawCannon(sx, groundY) {
   const trailEndY = groundY;
   const trailTopX = wx - 22*d;
   const trailTopY = wy + 12*d;
-
   ctx.save();
-
-  // Carriage trail
   ctx.shadowColor = 'rgba(90,208,255,0.6)';
   ctx.shadowBlur  = 12*d;
   const trailW = 10*d;
@@ -228,8 +295,6 @@ function drawCannon(sx, groundY) {
   ctx.arc(trailEndX - 5*d, trailEndY - 3*d, 5*d, 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
-
-  // Wheel
   ctx.shadowColor = 'rgba(90,208,255,0.7)';
   ctx.shadowBlur  = 16*d;
   const tyreGrad = ctx.createRadialGradient(wx-wheelR*0.25, wy-wheelR*0.25, 2*d, wx, wy, wheelR);
@@ -268,8 +333,6 @@ function drawCannon(sx, groundY) {
   ctx.strokeStyle = '#88eeff';
   ctx.lineWidth = 2*d;
   ctx.stroke();
-
-  // Barrel
   ctx.shadowColor = 'rgba(255,102,184,0.8)';
   ctx.shadowBlur  = 18*d;
   const perp = angle - Math.PI/2;
@@ -344,7 +407,6 @@ function drawCannon(sx, groundY) {
   ctx.moveTo(m1x + bpx*3*d, m1y + bpy*3*d);
   ctx.lineTo(m2x - bpx*3*d, m2y - bpy*3*d);
   ctx.stroke();
-
   ctx.restore();
 }
 
@@ -355,30 +417,24 @@ function launch(){
   resultOverlay.classList.add('hidden');
   sndLaunch();
   setTimeout(sndOink,120);
-  lastResult.textContent='Launched! \ud83d\udc37';
-
-  // Snap camera back to cannon instantly before pig moves
+  if(!lastResult.textContent.includes('fired')) lastResult.textContent='Launched! \ud83d\udc37';
   camX = CANNON_WORLD_X*dpr();
   targetCamX = camX;
-  holdCamFrames = 45; // hold camera on cannon for ~45 frames so launch is visible
-
+  holdCamFrames = 45;
   const {muzzleWX, muzzleY} = getMuzzleWorld();
   const d = dpr();
   const h = canvas.height;
   const ground = h - 40*d;
-
   const targetZone = Math.floor(Math.random()*zones.length);
   const zoneLeft   = zoneStartWorld(targetZone);
   const margin     = ZONE_W*d*0.15;
   const targetWX   = rnd(zoneLeft+margin, zoneLeft+ZONE_W*d-margin);
-
   const gravity = 0.028*d;
   const vy0     = rnd(-2.2,-1.4)*d;
   const dy      = ground - muzzleY;
   const disc    = vy0*vy0 + 2*gravity*dy;
   const t       = (-vy0 + Math.sqrt(disc)) / gravity;
   const vx      = (targetWX - muzzleWX) / t;
-
   pig={
     wx:muzzleWX, y:muzzleY,
     vx, vy:vy0,
@@ -392,32 +448,23 @@ function update(){
   const h=canvas.height,ground=h-40*dpr();
   sparkles=sparkles.filter(s=>s.life>0);
   sparkles.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.vy+=0.07*dpr();s.life--;});
-
   if(holdCamFrames>0){
-    // Camera locked on cannon — don't chase pig yet
     holdCamFrames--;
     targetCamX = CANNON_WORLD_X*dpr();
   } else if(pig){
     targetCamX = pig.wx - canvas.width*0.38;
   }
   camX += (targetCamX-camX)*0.06;
-
   if(!pig)return;
-
   pig.vy += 0.028*dpr();
   pig.wx += pig.vx;
   pig.y  += pig.vy;
   pig.spin += pig.vx*0.06;
   pig.trail.push({wx:pig.wx,y:pig.y,life:22});
   pig.trail=pig.trail.slice(-22);
-
   const maxWX=zones.length*ZONE_W*dpr();
-  if(pig.wx+pig.r>maxWX){
-    pig.wx=maxWX-pig.r;
-    pig.vx=0;
-  }
+  if(pig.wx+pig.r>maxWX){pig.wx=maxWX-pig.r;pig.vx=0;}
   if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.5;pig.wx=pig.r;}
-
   if(pig.y+pig.r>ground){
     pig.y=ground-pig.r;
     pig.vy*=-0.55;
@@ -492,9 +539,7 @@ function draw(){
     ctx.fillStyle=borderColors[i%borderColors.length];
     ctx.fillText(zones[i].amount,sx+zw/2,ground+33*dpr());
   }
-
   drawCannon(worldToScreen(CANNON_WORLD_X*dpr()), ground);
-
   if(pig){
     pig.trail.forEach(t=>{
       const tx=worldToScreen(t.wx);

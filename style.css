@@ -50,6 +50,20 @@ body::before{
   text-shadow:0 0 18px var(--glow-blue);
 }
 
+/* TWITCH BAR */
+.twitch-bar{
+  display:flex;align-items:center;gap:12px;
+  padding:8px 20px;
+  background:rgba(100,65,165,.25);
+  border-bottom:1px solid rgba(169,112,255,.25);
+  font-size:13px;
+  backdrop-filter:blur(10px);
+  z-index:9;
+}
+.twitch-bar.hidden{display:none;}
+.twitch-hint{color:var(--muted);}
+.twitch-hint strong{color:#c9a0ff;}
+
 /* BUTTONS */
 .hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .badge{
@@ -81,7 +95,7 @@ body::before{
 }
 .btn.mini{padding:8px 12px;border-radius:12px;font-size:13px;}
 
-/* LAYOUT — game takes full width, panel overlays on top */
+/* LAYOUT */
 .main{
   flex:1;display:grid;
   grid-template-columns:1fr;
@@ -90,7 +104,7 @@ body::before{
   position:relative;
 }
 
-/* CUSTOMIZE PANEL — floats as an overlay on the left */
+/* CUSTOMIZE PANEL — overlay */
 .panel{
   position:absolute;
   top:12px;
@@ -145,7 +159,7 @@ body::before{
   color:#ff8888!important;
 }
 
-/* GAME CANVAS — fills the full main area */
+/* GAME CANVAS */
 .gamewrap{
   position:relative;overflow:hidden;
   border:1px solid rgba(90,208,255,.18);
@@ -157,7 +171,7 @@ body::before{
 }
 canvas{display:block;width:100%;height:100%;}
 
-/* BIG RESULT — floats above the landing zone */
+/* RESULT OVERLAY */
 .result-overlay{
   position:absolute;inset:0;
   pointer-events:none;

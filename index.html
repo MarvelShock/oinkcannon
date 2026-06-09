@@ -15,10 +15,16 @@
       </div>
       <div class="hud">
         <div class="badge" id="lastResult">Ready</div>
+        <button class="btn mini" id="twitchBtn">🟣 Connect Twitch</button>
         <button class="btn mini" id="togglePanelBtn">Show Customize</button>
         <button class="btn mini" id="soundBtn">Sound: On</button>
         <button class="btn launch" id="launchBtn">🚀 Launch Pig</button>
       </div>
+    </div>
+    <div id="twitchBar" class="twitch-bar hidden">
+      <span id="twitchStatus">Not connected</span>
+      <span class="twitch-hint">Viewers type <strong>!oink</strong> in chat to launch the pig!</span>
+      <button class="btn mini" id="twitchDisconnectBtn" style="margin-left:auto">Disconnect</button>
     </div>
     <div class="main">
       <div class="panel hidden" id="panel">
@@ -29,7 +35,6 @@
       </div>
       <div class="gamewrap">
         <canvas id="game"></canvas>
-        <!-- Big result overlay shown on landing -->
         <div id="resultOverlay" class="result-overlay hidden">
           <div id="resultText" class="result-text"></div>
         </div>
