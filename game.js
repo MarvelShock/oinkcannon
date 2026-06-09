@@ -11,7 +11,8 @@ let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
 
 const ZONE_W=240;
-const CANNON_WORLD_X=-1800;
+// Cannon sits just off the left edge of zone 0 — close enough that ballistic vx stays sane
+const CANNON_WORLD_X=-320;
 function dpr(){return devicePixelRatio||1;}
 function resize(){canvas.width=canvas.clientWidth*dpr();canvas.height=canvas.clientHeight*dpr();}
 window.addEventListener('resize',resize);resize();
@@ -152,27 +153,20 @@ function showResult(z,zIdx){
   resultTimer=setTimeout(()=>resultOverlay.classList.add('hidden'),4500);
 }
 
-// ---- DRAW CANNON (reference style: tapered barrel, single large wheel, carriage trail) ----
+// ---- DRAW CANNON ----
 function drawCannon(sx, groundY) {
   const d = dpr();
-  // Cannon geometry (all in screen-space relative to anchor)
-  // Anchor: wheel center sits on the ground
-  const angle = -0.30; // barrel tilt upward ~17deg
+  const angle = -0.30;
   const wheelR  = 38*d;
-  const wx = sx + 148*d;          // wheel center X
-  const wy = groundY - wheelR;    // wheel center Y (sits on ground)
-
-  // Barrel runs from breech (back) to muzzle (front/right+up)
-  // Breech is near the wheel top-right; muzzle extends right
+  const wx = sx + 148*d;
+  const wy = groundY - wheelR;
   const breechX = wx - 10*d;
   const breechY = wy - 18*d;
   const barrelLen = 110*d;
   const muzzleX = breechX + Math.cos(angle)*barrelLen;
   const muzzleY = breechY + Math.sin(angle)*barrelLen;
-  const breechR = 20*d;  // half-width at breech (wider)
-  const muzzleR = 13*d;  // half-width at muzzle (narrower)
-
-  // Carriage trail: from under wheel back-left down to ground
+  const breechR = 20*d;
+  const muzzleR = 13*d;
   const trailEndX = sx + 8*d;
   const trailEndY = groundY;
   const trailTopX = wx - 22*d;
@@ -180,10 +174,9 @@ function drawCannon(sx, groundY) {
 
   ctx.save();
 
-  // ---- 1. CARRIAGE TRAIL (blue, slopes back-left to ground) ----
+  // Carriage trail
   ctx.shadowColor = 'rgba(90,208,255,0.6)';
   ctx.shadowBlur  = 12*d;
-  // Main trail beam
   const trailW = 10*d;
   const trailAngle = Math.atan2(trailEndY - trailTopY, trailEndX - trailTopX);
   const perpX = Math.sin(trailAngle)*trailW/2;
@@ -203,7 +196,6 @@ function drawCannon(sx, groundY) {
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  // Ground spike / knob at trail end
   ctx.shadowBlur = 8*d;
   ctx.fillStyle = '#3399cc';
   ctx.strokeStyle = '#88eeff';
@@ -212,17 +204,15 @@ function drawCannon(sx, groundY) {
   ctx.roundRect(trailEndX - 10*d, trailEndY - 8*d, 14*d, 10*d, 3*d);
   ctx.fill();
   ctx.stroke();
-  // Knob ball
   ctx.fillStyle = '#5ad0ff';
   ctx.beginPath();
   ctx.arc(trailEndX - 5*d, trailEndY - 3*d, 5*d, 0, Math.PI*2);
   ctx.fill();
   ctx.stroke();
 
-  // ---- 2. WHEEL (large, spoked, blue) ----
+  // Wheel
   ctx.shadowColor = 'rgba(90,208,255,0.7)';
   ctx.shadowBlur  = 16*d;
-  // Outer tyre
   const tyreGrad = ctx.createRadialGradient(wx-wheelR*0.25, wy-wheelR*0.25, 2*d, wx, wy, wheelR);
   tyreGrad.addColorStop(0,   '#5ad0ff');
   tyreGrad.addColorStop(0.65,'#1a6090');
@@ -234,13 +224,11 @@ function drawCannon(sx, groundY) {
   ctx.strokeStyle = '#88eeff';
   ctx.lineWidth = 3*d;
   ctx.stroke();
-  // Inner rim ring
   ctx.strokeStyle = 'rgba(90,208,255,0.4)';
   ctx.lineWidth = 2*d;
   ctx.beginPath();
   ctx.arc(wx, wy, wheelR - 7*d, 0, Math.PI*2);
   ctx.stroke();
-  // Spokes (10 spokes like reference)
   ctx.strokeStyle = 'rgba(90,208,255,0.75)';
   ctx.lineWidth = 2*d;
   for(let s=0;s<10;s++){
@@ -250,7 +238,6 @@ function drawCannon(sx, groundY) {
     ctx.lineTo(wx + Math.cos(a)*(wheelR-6*d), wy + Math.sin(a)*(wheelR-6*d));
     ctx.stroke();
   }
-  // Hub
   ctx.shadowBlur = 0;
   const hubGrad = ctx.createRadialGradient(wx-3*d, wy-3*d, 1*d, wx, wy, 10*d);
   hubGrad.addColorStop(0, '#aaf0ff');
@@ -263,17 +250,15 @@ function drawCannon(sx, groundY) {
   ctx.lineWidth = 2*d;
   ctx.stroke();
 
-  // ---- 3. BARREL (tapered trapezoid, pink, angled up-right) ----
+  // Barrel
   ctx.shadowColor = 'rgba(255,102,184,0.8)';
   ctx.shadowBlur  = 18*d;
-  // Build a tapered barrel as a trapezoid path along the angle
   const perp = angle - Math.PI/2;
   const bpx = Math.cos(perp), bpy = Math.sin(perp);
-  // Four corners: breech bottom, breech top, muzzle top, muzzle bottom
-  const b1x = breechX + bpx*breechR, b1y = breechY + bpy*breechR; // breech top
-  const b2x = breechX - bpx*breechR, b2y = breechY - bpy*breechR; // breech bottom
-  const m1x = muzzleX + bpx*muzzleR, m1y = muzzleY + bpy*muzzleR; // muzzle top
-  const m2x = muzzleX - bpx*muzzleR, m2y = muzzleY - bpy*muzzleR; // muzzle bottom
+  const b1x = breechX + bpx*breechR, b1y = breechY + bpy*breechR;
+  const b2x = breechX - bpx*breechR, b2y = breechY - bpy*breechR;
+  const m1x = muzzleX + bpx*muzzleR, m1y = muzzleY + bpy*muzzleR;
+  const m2x = muzzleX - bpx*muzzleR, m2y = muzzleY - bpy*muzzleR;
   const barrelGrad = ctx.createLinearGradient(
     breechX + bpx*breechR, breechY + bpy*breechR,
     breechX - bpx*breechR, breechY - bpy*breechR
@@ -293,11 +278,8 @@ function drawCannon(sx, groundY) {
   ctx.strokeStyle = '#ffaadd';
   ctx.lineWidth = 2*d;
   ctx.stroke();
-
-  // Shine on top surface of barrel
   ctx.shadowBlur = 0;
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  // thin highlight strip along the top edge
   const shineOff = 4*d;
   ctx.beginPath();
   ctx.moveTo(b1x - Math.cos(perp)*shineOff*0.5, b1y - Math.sin(perp)*shineOff*0.5);
@@ -306,11 +288,9 @@ function drawCannon(sx, groundY) {
   ctx.lineTo(b1x - Math.cos(perp)*shineOff*2,   b1y - Math.sin(perp)*shineOff*2);
   ctx.closePath();
   ctx.fill();
-
-  // Decorative band ring near middle of barrel
   ctx.shadowColor = 'rgba(255,102,184,0.5)';
   ctx.shadowBlur  = 8*d;
-  const bandT = 0.42; // position along barrel
+  const bandT = 0.42;
   const bandX = breechX + Math.cos(angle)*barrelLen*bandT;
   const bandY = breechY + Math.sin(angle)*barrelLen*bandT;
   const bandR = breechR - (breechR-muzzleR)*bandT + 3*d;
@@ -320,8 +300,6 @@ function drawCannon(sx, groundY) {
   ctx.moveTo(bandX + bpx*bandR, bandY + bpy*bandR);
   ctx.lineTo(bandX - bpx*bandR, bandY - bpy*bandR);
   ctx.stroke();
-
-  // Breech cap (round end at back)
   ctx.shadowColor = 'rgba(255,102,184,0.7)';
   ctx.shadowBlur  = 12*d;
   const breechCapGrad = ctx.createRadialGradient(breechX-4*d, breechY-4*d, 1*d, breechX, breechY, breechR);
@@ -334,14 +312,11 @@ function drawCannon(sx, groundY) {
   ctx.strokeStyle = '#ffaadd';
   ctx.lineWidth = 2*d;
   ctx.stroke();
-  // Pig emoji on breech
   ctx.shadowBlur = 0;
   ctx.font = `${18*d}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('🐷', breechX, breechY);
-
-  // Muzzle cap (slightly flared)
   ctx.shadowColor = 'rgba(255,102,184,0.5)';
   ctx.shadowBlur  = 8*d;
   ctx.strokeStyle = '#ff99d4';
@@ -352,16 +327,6 @@ function drawCannon(sx, groundY) {
   ctx.stroke();
 
   ctx.restore();
-}
-
-// Barrel tip world position for pig launch (must match drawCannon geometry)
-function cannonTipWorld() {
-  const d = dpr();
-  const angle = -0.30;
-  const barrelLen = 110*d;
-  const bx = CANNON_WORLD_X*d + 148*d - 10*d; // breechX in world space
-  const by_screen_rel = -18*d; // relative to wy, calculated at launch time
-  return { angle, barrelLen, bx, breechOffY: by_screen_rel };
 }
 
 // ---- LAUNCH ----
@@ -376,26 +341,38 @@ function launch(){
   const h=canvas.height;
   const ground=h-40*dpr();
   const d=dpr();
+
+  // Cannon muzzle position in world space (matches drawCannon geometry)
   const wheelR=38*d;
   const wy=ground-wheelR;
   const angle=-0.30;
   const barrelLen=110*d;
-  const breechX=CANNON_WORLD_X*d+148*d-10*d;
-  const breechY=wy-18*d;
-  const startWX=breechX+Math.cos(angle)*barrelLen;
-  const startY=breechY+Math.sin(angle)*barrelLen;
+  const cannonScreenX = worldToScreen(CANNON_WORLD_X*d);
+  const wx_screen = cannonScreenX + 148*d;
+  // Convert back to world: wx_world = wx_screen + camX
+  const breechWX = (wx_screen + camX) - 10*d;
+  const breechY  = wy - 18*d;
+  const startWX  = breechWX + Math.cos(angle)*barrelLen;
+  const startY   = breechY  + Math.sin(angle)*barrelLen;
 
-  const targetZone=Math.floor(Math.random()*zones.length);
-  const zoneLeft=zoneStartWorld(targetZone);
-  const margin=ZONE_W*d*0.2;
-  const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*d-margin);
+  // Pick a random zone — spread evenly including zones that are further away
+  const targetZone = Math.floor(Math.random()*zones.length);
+  const zoneLeft   = zoneStartWorld(targetZone);
+  const margin     = ZONE_W*d*0.15;
+  const targetWX   = rnd(zoneLeft+margin, zoneLeft+ZONE_W*d-margin);
 
-  const g=0.04*d;
-  const vy0=rnd(-3,-2)*d;
-  const a=0.5*g, b=vy0, c=startY-ground;
-  const disc=b*b-4*a*c;
-  const t=(-b+Math.sqrt(disc))/(2*a);
-  const vx=(targetWX-startWX)/t;
+  // Physics: use a fixed, slow upward velocity and compute vx from ballistic formula
+  // Low gravity + gentle upward velocity = slow floaty arc
+  const gravity = 0.028*d;            // very gentle gravity for slow arc
+  const vy0     = rnd(-2.2,-1.4)*d;   // gentle upward kick
+
+  // Solve: startY + vy0*t + 0.5*gravity*t^2 = ground  =>  t = (-vy0 + sqrt(vy0^2 - 2*gravity*(startY-ground))) / gravity
+  const dy = ground - startY;          // positive (ground is below start)
+  const disc = vy0*vy0 + 2*gravity*dy;
+  const t = (-vy0 + Math.sqrt(disc)) / gravity;
+
+  // Horizontal velocity to reach target in time t
+  const vx = (targetWX - startWX) / t;
 
   pig={
     wx:startWX, y:startY,
@@ -403,8 +380,8 @@ function launch(){
     r:18*d, spin:0, trail:[],
     bounces:0
   };
-  camX=CANNON_WORLD_X*d;
-  targetCamX=camX;
+  camX = CANNON_WORLD_X*d;
+  targetCamX = camX;
 }
 
 // ---- UPDATE ----
@@ -416,25 +393,29 @@ function update(){
   camX+=(targetCamX-camX)*0.04;
   if(!pig)return;
 
-  pig.vy+=0.04*dpr();
-  pig.wx+=pig.vx;
-  pig.y+=pig.vy;
-  pig.spin+=pig.vx*0.08;
+  pig.vy += 0.028*dpr();   // must match launch gravity
+  pig.wx += pig.vx;
+  pig.y  += pig.vy;
+  pig.spin += pig.vx*0.06;
   pig.trail.push({wx:pig.wx,y:pig.y,life:22});
   pig.trail=pig.trail.slice(-22);
 
+  // Soft clamp — never bounce off the wall; clamp gently so pig settles in last zone
   const maxWX=zones.length*ZONE_W*dpr();
-  if(pig.wx+pig.r>maxWX){pig.vx*=-0.7;pig.wx=maxWX-pig.r;sndBounce();}
-  if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.7;pig.wx=pig.r;}
+  if(pig.wx+pig.r>maxWX){
+    pig.wx=maxWX-pig.r;
+    pig.vx=0;  // stop horizontal dead at wall instead of bouncing wildly
+  }
+  if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.5;pig.wx=pig.r;}
 
   if(pig.y+pig.r>ground){
     pig.y=ground-pig.r;
-    pig.vy*=-0.62;
-    pig.vx*=0.80;
+    pig.vy*=-0.55;
+    pig.vx*=0.75;
     pig.bounces++;
-    pig.vx+=rnd(-0.4,0.4)*dpr();
+    pig.vx+=rnd(-0.3,0.3)*dpr();
     sndBounce();
-    if(Math.abs(pig.vy)<1.2*dpr()&&Math.abs(pig.vx)<0.7*dpr()){
+    if(Math.abs(pig.vy)<1.0*dpr()&&Math.abs(pig.vx)<0.6*dpr()){
       const zIdx=zoneForWorldX(pig.wx);
       showResult(zones[zIdx],zIdx);
       sndWin();
