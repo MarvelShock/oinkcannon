@@ -9,9 +9,9 @@ const resultOverlay=document.getElementById('resultOverlay');
 const resultText=document.getElementById('resultText');
 let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
+let holdCamFrames=0; // frames to keep camera locked on cannon after launch
 
 const ZONE_W=240;
-// Cannon sits just off the left edge of zone 0 — close enough that ballistic vx stays sane
 const CANNON_WORLD_X=-320;
 function dpr(){return devicePixelRatio||1;}
 function resize(){canvas.width=canvas.clientWidth*dpr();canvas.height=canvas.clientHeight*dpr();}
@@ -19,13 +19,32 @@ window.addEventListener('resize',resize);resize();
 let camX=CANNON_WORLD_X*dpr();
 let targetCamX=camX;
 
+// Pure world-space muzzle position — no screen coords involved
+function getMuzzleWorld(){
+  const d=dpr();
+  const h=canvas.height;
+  const ground=h-40*d;
+  const wheelR=38*d;
+  const wy=ground-wheelR;
+  const angle=-0.30;
+  const barrelLen=110*d;
+  // cannon screen anchor sx = worldToScreen(CANNON_WORLD_X*d)
+  // wx_screen = sx + 148*d  =>  wx_world = CANNON_WORLD_X*d + 148*d
+  const wx_world = CANNON_WORLD_X*d + 148*d;
+  const breechWX  = wx_world - 10*d;
+  const breechY   = wy - 18*d;
+  const muzzleWX  = breechWX + Math.cos(angle)*barrelLen;
+  const muzzleY   = breechY  + Math.sin(angle)*barrelLen;
+  return {muzzleWX, muzzleY, angle};
+}
+
 const defaults=[
-  {name:'5 Subs',        amount:'🎉 5 Subs',              sub:['5','5','5','5','5']},
-  {name:'10 Subs',       amount:'🎊 10 Subs',             sub:['10','10','10','10','10']},
-  {name:'15 Subs',       amount:'✨ 15 Subs',              sub:['15','15','15','15','15']},
-  {name:'25 Subs',       amount:'🐷 25 Subs',             sub:['25','25','25','25','25']},
-  {name:'Gift Your Age', amount:'🎂 Gift Your Age',       sub:['age','age','age','age','age']},
-  {name:'Pushup Gifting',amount:'💪 Gift = Your Pushups', sub:['pushups','pushups','pushups','pushups','pushups']}
+  {name:'5 Subs',        amount:'\ud83c\udf89 5 Subs',              sub:['5','5','5','5','5']},
+  {name:'10 Subs',       amount:'\ud83c\udf8a 10 Subs',             sub:['10','10','10','10','10']},
+  {name:'15 Subs',       amount:'\u2728 15 Subs',              sub:['15','15','15','15','15']},
+  {name:'25 Subs',       amount:'\ud83d\udc37 25 Subs',             sub:['25','25','25','25','25']},
+  {name:'Gift Your Age', amount:'\ud83c\udf82 Gift Your Age',       sub:['age','age','age','age','age']},
+  {name:'Pushup Gifting',amount:'\ud83d\udcaa Gift = Your Pushups', sub:['pushups','pushups','pushups','pushups','pushups']}
 ];
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
@@ -86,8 +105,8 @@ function buildUI(){
     box.innerHTML=`
       <div class="zonehead">
         <strong>Zone ${i+1}</strong>
-        <span class="gear">⚙️</span>
-        <button class="btn mini remove-zone" data-idx="${i}" title="Remove">🗑</button>
+        <span class="gear">\u2699\ufe0f</span>
+        <button class="btn mini remove-zone" data-idx="${i}" title="Remove">\ud83d\uddd1</button>
       </div>
       <div class="zonerows">
         <input data-k="name" value="${z.name}">
@@ -116,7 +135,7 @@ function buildUI(){
   addBtn.onclick=()=>{zones.push({name:'New Zone',amount:'x1',sub:['','','','','']});saveZones();buildUI();};
   zonesUI.appendChild(addBtn);
   const resetBtn=document.createElement('button');
-  resetBtn.className='btn mini';resetBtn.textContent='🔄 Reset to Defaults';
+  resetBtn.className='btn mini';resetBtn.textContent='\ud83d\udd04 Reset to Defaults';
   resetBtn.style.cssText='margin-top:8px;width:100%;opacity:.7;';
   resetBtn.onclick=()=>{
     if(!confirm('Reset all zones to defaults?'))return;
@@ -140,7 +159,7 @@ function rnd(min,max){return min+Math.random()*(max-min);}
 function showResult(z,zIdx){
   if(resultTimer)clearTimeout(resultTimer);
   resultText.innerHTML=`<span class="res-name">${z.name||''}</span><br><span class="res-amt">${z.amount||''}</span>`;
-  lastResult.textContent=`${z.name||''} → ${z.amount||''}`;
+  lastResult.textContent=`${z.name||''} \u2192 ${z.amount||''}`;
   const zoneCenterWorld=zoneStartWorld(zIdx)+(ZONE_W*dpr()/2);
   const sx=worldToScreen(zoneCenterWorld);
   const overlayW=Math.min(320*dpr(),canvas.width*0.9);
@@ -316,7 +335,7 @@ function drawCannon(sx, groundY) {
   ctx.font = `${18*d}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('🐷', breechX, breechY);
+  ctx.fillText('\ud83d\udc37', breechX, breechY);
   ctx.shadowColor = 'rgba(255,102,184,0.5)';
   ctx.shadowBlur  = 8*d;
   ctx.strokeStyle = '#ff99d4';
@@ -336,52 +355,36 @@ function launch(){
   resultOverlay.classList.add('hidden');
   sndLaunch();
   setTimeout(sndOink,120);
-  lastResult.textContent='Launched! 🐷';
+  lastResult.textContent='Launched! \ud83d\udc37';
 
-  const h=canvas.height;
-  const ground=h-40*dpr();
-  const d=dpr();
+  // Snap camera back to cannon instantly before pig moves
+  camX = CANNON_WORLD_X*dpr();
+  targetCamX = camX;
+  holdCamFrames = 45; // hold camera on cannon for ~45 frames so launch is visible
 
-  // Cannon muzzle position in world space (matches drawCannon geometry)
-  const wheelR=38*d;
-  const wy=ground-wheelR;
-  const angle=-0.30;
-  const barrelLen=110*d;
-  const cannonScreenX = worldToScreen(CANNON_WORLD_X*d);
-  const wx_screen = cannonScreenX + 148*d;
-  // Convert back to world: wx_world = wx_screen + camX
-  const breechWX = (wx_screen + camX) - 10*d;
-  const breechY  = wy - 18*d;
-  const startWX  = breechWX + Math.cos(angle)*barrelLen;
-  const startY   = breechY  + Math.sin(angle)*barrelLen;
+  const {muzzleWX, muzzleY} = getMuzzleWorld();
+  const d = dpr();
+  const h = canvas.height;
+  const ground = h - 40*d;
 
-  // Pick a random zone — spread evenly including zones that are further away
   const targetZone = Math.floor(Math.random()*zones.length);
   const zoneLeft   = zoneStartWorld(targetZone);
   const margin     = ZONE_W*d*0.15;
   const targetWX   = rnd(zoneLeft+margin, zoneLeft+ZONE_W*d-margin);
 
-  // Physics: use a fixed, slow upward velocity and compute vx from ballistic formula
-  // Low gravity + gentle upward velocity = slow floaty arc
-  const gravity = 0.028*d;            // very gentle gravity for slow arc
-  const vy0     = rnd(-2.2,-1.4)*d;   // gentle upward kick
-
-  // Solve: startY + vy0*t + 0.5*gravity*t^2 = ground  =>  t = (-vy0 + sqrt(vy0^2 - 2*gravity*(startY-ground))) / gravity
-  const dy = ground - startY;          // positive (ground is below start)
-  const disc = vy0*vy0 + 2*gravity*dy;
-  const t = (-vy0 + Math.sqrt(disc)) / gravity;
-
-  // Horizontal velocity to reach target in time t
-  const vx = (targetWX - startWX) / t;
+  const gravity = 0.028*d;
+  const vy0     = rnd(-2.2,-1.4)*d;
+  const dy      = ground - muzzleY;
+  const disc    = vy0*vy0 + 2*gravity*dy;
+  const t       = (-vy0 + Math.sqrt(disc)) / gravity;
+  const vx      = (targetWX - muzzleWX) / t;
 
   pig={
-    wx:startWX, y:startY,
+    wx:muzzleWX, y:muzzleY,
     vx, vy:vy0,
     r:18*d, spin:0, trail:[],
     bounces:0
   };
-  camX = CANNON_WORLD_X*d;
-  targetCamX = camX;
 }
 
 // ---- UPDATE ----
@@ -389,22 +392,29 @@ function update(){
   const h=canvas.height,ground=h-40*dpr();
   sparkles=sparkles.filter(s=>s.life>0);
   sparkles.forEach(s=>{s.x+=s.vx;s.y+=s.vy;s.vy+=0.07*dpr();s.life--;});
-  if(pig) targetCamX=pig.wx-canvas.width*0.38;
-  camX+=(targetCamX-camX)*0.04;
+
+  if(holdCamFrames>0){
+    // Camera locked on cannon — don't chase pig yet
+    holdCamFrames--;
+    targetCamX = CANNON_WORLD_X*dpr();
+  } else if(pig){
+    targetCamX = pig.wx - canvas.width*0.38;
+  }
+  camX += (targetCamX-camX)*0.06;
+
   if(!pig)return;
 
-  pig.vy += 0.028*dpr();   // must match launch gravity
+  pig.vy += 0.028*dpr();
   pig.wx += pig.vx;
   pig.y  += pig.vy;
   pig.spin += pig.vx*0.06;
   pig.trail.push({wx:pig.wx,y:pig.y,life:22});
   pig.trail=pig.trail.slice(-22);
 
-  // Soft clamp — never bounce off the wall; clamp gently so pig settles in last zone
   const maxWX=zones.length*ZONE_W*dpr();
   if(pig.wx+pig.r>maxWX){
     pig.wx=maxWX-pig.r;
-    pig.vx=0;  // stop horizontal dead at wall instead of bouncing wildly
+    pig.vx=0;
   }
   if(pig.wx-pig.r<0){pig.vx=Math.abs(pig.vx)*0.5;pig.wx=pig.r;}
 
@@ -499,7 +509,7 @@ function draw(){
     ctx.rotate(pig.spin);
     ctx.font=`${pig.r*2.2}px serif`;
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText('🐷',0,0);
+    ctx.fillText('\ud83d\udc37',0,0);
     ctx.restore();
   }
   sparkles.forEach(s=>{
