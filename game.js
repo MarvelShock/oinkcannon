@@ -152,115 +152,216 @@ function showResult(z,zIdx){
   resultTimer=setTimeout(()=>resultOverlay.classList.add('hidden'),4500);
 }
 
-// ---- DRAW CANNON ----
+// ---- DRAW CANNON (reference style: tapered barrel, single large wheel, carriage trail) ----
 function drawCannon(sx, groundY) {
   const d = dpr();
-  const angle = -0.32; // upward angle in radians (~18 deg)
-  const barrelLen = 90*d;
-  const barrelW   = 28*d;
-  const baseR     = 36*d;
-  const wheelR    = 22*d;
+  // Cannon geometry (all in screen-space relative to anchor)
+  // Anchor: wheel center sits on the ground
+  const angle = -0.30; // barrel tilt upward ~17deg
+  const wheelR  = 38*d;
+  const wx = sx + 148*d;          // wheel center X
+  const wy = groundY - wheelR;    // wheel center Y (sits on ground)
 
-  // cannon body center — sits just above the axle
-  const bx = sx + 175*d;
-  const by = groundY - wheelR - baseR*0.55;
+  // Barrel runs from breech (back) to muzzle (front/right+up)
+  // Breech is near the wheel top-right; muzzle extends right
+  const breechX = wx - 10*d;
+  const breechY = wy - 18*d;
+  const barrelLen = 110*d;
+  const muzzleX = breechX + Math.cos(angle)*barrelLen;
+  const muzzleY = breechY + Math.sin(angle)*barrelLen;
+  const breechR = 20*d;  // half-width at breech (wider)
+  const muzzleR = 13*d;  // half-width at muzzle (narrower)
 
-  // barrel tip: extends right+up from body center
-  const tipX = bx + Math.cos(angle)*barrelLen;
-  const tipY = by + Math.sin(angle)*barrelLen;
+  // Carriage trail: from under wheel back-left down to ground
+  const trailEndX = sx + 8*d;
+  const trailEndY = groundY;
+  const trailTopX = wx - 22*d;
+  const trailTopY = wy + 12*d;
 
   ctx.save();
 
-  // --- barrel (no arc, just a rounded rectangle) ---
-  ctx.save();
-  ctx.translate(bx, by);
-  ctx.rotate(angle);
-  const barrelGrad = ctx.createLinearGradient(0, -barrelW/2, 0, barrelW/2);
-  barrelGrad.addColorStop(0,   '#cc55aa');
-  barrelGrad.addColorStop(0.4, '#ff66b8');
-  barrelGrad.addColorStop(1,   '#7a1a55');
-  ctx.fillStyle = barrelGrad;
-  ctx.shadowColor = 'rgba(255,102,184,.7)';
-  ctx.shadowBlur  = 18*d;
+  // ---- 1. CARRIAGE TRAIL (blue, slopes back-left to ground) ----
+  ctx.shadowColor = 'rgba(90,208,255,0.6)';
+  ctx.shadowBlur  = 12*d;
+  // Main trail beam
+  const trailW = 10*d;
+  const trailAngle = Math.atan2(trailEndY - trailTopY, trailEndX - trailTopX);
+  const perpX = Math.sin(trailAngle)*trailW/2;
+  const perpY = -Math.cos(trailAngle)*trailW/2;
+  const trailGrad = ctx.createLinearGradient(trailTopX, trailTopY, trailEndX, trailEndY);
+  trailGrad.addColorStop(0,   '#5ad0ff');
+  trailGrad.addColorStop(0.5, '#2288bb');
+  trailGrad.addColorStop(1,   '#0a3a55');
+  ctx.fillStyle = trailGrad;
+  ctx.strokeStyle = '#88eeff';
+  ctx.lineWidth = 1.5*d;
   ctx.beginPath();
-  ctx.roundRect(0, -barrelW/2, barrelLen, barrelW, [4*d, 10*d, 10*d, 4*d]);
+  ctx.moveTo(trailTopX - perpX, trailTopY - perpY);
+  ctx.lineTo(trailEndX - perpX, trailEndY - perpY);
+  ctx.lineTo(trailEndX + perpX, trailEndY + perpY);
+  ctx.lineTo(trailTopX + perpX, trailTopY + perpY);
+  ctx.closePath();
   ctx.fill();
-  // shine strip
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255,255,255,.18)';
+  ctx.stroke();
+  // Ground spike / knob at trail end
+  ctx.shadowBlur = 8*d;
+  ctx.fillStyle = '#3399cc';
+  ctx.strokeStyle = '#88eeff';
+  ctx.lineWidth = 1.5*d;
   ctx.beginPath();
-  ctx.roundRect(6*d, -barrelW/2+4*d, barrelLen-12*d, barrelW*0.28, 4*d);
+  ctx.roundRect(trailEndX - 10*d, trailEndY - 8*d, 14*d, 10*d, 3*d);
   ctx.fill();
-  ctx.restore();
+  ctx.stroke();
+  // Knob ball
+  ctx.fillStyle = '#5ad0ff';
+  ctx.beginPath();
+  ctx.arc(trailEndX - 5*d, trailEndY - 3*d, 5*d, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
 
-  // --- cannon body circle ---
-  ctx.shadowColor = 'rgba(255,102,184,.7)';
-  ctx.shadowBlur  = 20*d;
-  const bodyGrad = ctx.createRadialGradient(bx-8*d, by-8*d, 4*d, bx, by, baseR);
-  bodyGrad.addColorStop(0,   '#ff66b8');
-  bodyGrad.addColorStop(0.6, '#a0206a');
-  bodyGrad.addColorStop(1,   '#4a0830');
-  ctx.fillStyle = bodyGrad;
+  // ---- 2. WHEEL (large, spoked, blue) ----
+  ctx.shadowColor = 'rgba(90,208,255,0.7)';
+  ctx.shadowBlur  = 16*d;
+  // Outer tyre
+  const tyreGrad = ctx.createRadialGradient(wx-wheelR*0.25, wy-wheelR*0.25, 2*d, wx, wy, wheelR);
+  tyreGrad.addColorStop(0,   '#5ad0ff');
+  tyreGrad.addColorStop(0.65,'#1a6090');
+  tyreGrad.addColorStop(1,   '#061825');
+  ctx.fillStyle = tyreGrad;
   ctx.beginPath();
-  ctx.arc(bx, by, baseR, 0, Math.PI*2);
+  ctx.arc(wx, wy, wheelR, 0, Math.PI*2);
   ctx.fill();
-  ctx.strokeStyle = '#ff9cd8';
+  ctx.strokeStyle = '#88eeff';
   ctx.lineWidth = 3*d;
   ctx.stroke();
-  // pig on body
-  ctx.shadowBlur = 0;
-  ctx.font = `${22*d}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('🐷', bx, by);
-
-  // --- carriage / axle ---
-  ctx.shadowColor = 'rgba(90,208,255,.5)';
-  ctx.shadowBlur  = 14*d;
-  const axleY  = groundY - wheelR;
-  const axleX1 = bx - 32*d;
-  const axleX2 = bx + 30*d;
-  const carriageGrad = ctx.createLinearGradient(axleX1, 0, axleX2, 0);
-  carriageGrad.addColorStop(0,   '#1a4a7a');
-  carriageGrad.addColorStop(0.5, '#5ad0ff');
-  carriageGrad.addColorStop(1,   '#1a4a7a');
-  ctx.fillStyle = carriageGrad;
+  // Inner rim ring
+  ctx.strokeStyle = 'rgba(90,208,255,0.4)';
+  ctx.lineWidth = 2*d;
   ctx.beginPath();
-  ctx.roundRect(axleX1, axleY - 8*d, axleX2-axleX1, 16*d, 6*d);
+  ctx.arc(wx, wy, wheelR - 7*d, 0, Math.PI*2);
+  ctx.stroke();
+  // Spokes (10 spokes like reference)
+  ctx.strokeStyle = 'rgba(90,208,255,0.75)';
+  ctx.lineWidth = 2*d;
+  for(let s=0;s<10;s++){
+    const a = (s/10)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(wx + Math.cos(a)*7*d, wy + Math.sin(a)*7*d);
+    ctx.lineTo(wx + Math.cos(a)*(wheelR-6*d), wy + Math.sin(a)*(wheelR-6*d));
+    ctx.stroke();
+  }
+  // Hub
+  ctx.shadowBlur = 0;
+  const hubGrad = ctx.createRadialGradient(wx-3*d, wy-3*d, 1*d, wx, wy, 10*d);
+  hubGrad.addColorStop(0, '#aaf0ff');
+  hubGrad.addColorStop(1, '#1a6090');
+  ctx.fillStyle = hubGrad;
+  ctx.beginPath();
+  ctx.arc(wx, wy, 10*d, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#88eeff';
+  ctx.lineWidth = 2*d;
+  ctx.stroke();
+
+  // ---- 3. BARREL (tapered trapezoid, pink, angled up-right) ----
+  ctx.shadowColor = 'rgba(255,102,184,0.8)';
+  ctx.shadowBlur  = 18*d;
+  // Build a tapered barrel as a trapezoid path along the angle
+  const perp = angle - Math.PI/2;
+  const bpx = Math.cos(perp), bpy = Math.sin(perp);
+  // Four corners: breech bottom, breech top, muzzle top, muzzle bottom
+  const b1x = breechX + bpx*breechR, b1y = breechY + bpy*breechR; // breech top
+  const b2x = breechX - bpx*breechR, b2y = breechY - bpy*breechR; // breech bottom
+  const m1x = muzzleX + bpx*muzzleR, m1y = muzzleY + bpy*muzzleR; // muzzle top
+  const m2x = muzzleX - bpx*muzzleR, m2y = muzzleY - bpy*muzzleR; // muzzle bottom
+  const barrelGrad = ctx.createLinearGradient(
+    breechX + bpx*breechR, breechY + bpy*breechR,
+    breechX - bpx*breechR, breechY - bpy*breechR
+  );
+  barrelGrad.addColorStop(0,    '#ff99d4');
+  barrelGrad.addColorStop(0.25, '#ff66b8');
+  barrelGrad.addColorStop(0.6,  '#cc2288');
+  barrelGrad.addColorStop(1,    '#6a0a44');
+  ctx.fillStyle = barrelGrad;
+  ctx.beginPath();
+  ctx.moveTo(b1x, b1y);
+  ctx.lineTo(m1x, m1y);
+  ctx.lineTo(m2x, m2y);
+  ctx.lineTo(b2x, b2y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#ffaadd';
+  ctx.lineWidth = 2*d;
+  ctx.stroke();
+
+  // Shine on top surface of barrel
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  // thin highlight strip along the top edge
+  const shineOff = 4*d;
+  ctx.beginPath();
+  ctx.moveTo(b1x - Math.cos(perp)*shineOff*0.5, b1y - Math.sin(perp)*shineOff*0.5);
+  ctx.lineTo(m1x - Math.cos(perp)*shineOff*0.5, m1y - Math.sin(perp)*shineOff*0.5);
+  ctx.lineTo(m1x - Math.cos(perp)*shineOff*2,   m1y - Math.sin(perp)*shineOff*2);
+  ctx.lineTo(b1x - Math.cos(perp)*shineOff*2,   b1y - Math.sin(perp)*shineOff*2);
+  ctx.closePath();
   ctx.fill();
 
-  // --- wheels ---
-  function drawWheel(cx, cy) {
-    const wg = ctx.createRadialGradient(cx-wheelR*0.3, cy-wheelR*0.3, 2*d, cx, cy, wheelR);
-    wg.addColorStop(0,   '#4a9acc');
-    wg.addColorStop(0.7, '#1a5580');
-    wg.addColorStop(1,   '#0a2a40');
-    ctx.fillStyle = wg;
-    ctx.beginPath();
-    ctx.arc(cx, cy, wheelR, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = '#5ad0ff';
-    ctx.lineWidth = 3*d;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(90,208,255,.6)';
-    ctx.lineWidth = 2*d;
-    for(let s=0;s<6;s++){
-      const a=(s/6)*Math.PI*2;
-      ctx.beginPath();
-      ctx.moveTo(cx,cy);
-      ctx.lineTo(cx+Math.cos(a)*(wheelR-4*d), cy+Math.sin(a)*(wheelR-4*d));
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#5ad0ff';
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 6*d, 0, Math.PI*2);
-    ctx.fill();
-  }
-  drawWheel(axleX1 + 4*d, axleY);
-  drawWheel(axleX2 - 4*d, axleY);
+  // Decorative band ring near middle of barrel
+  ctx.shadowColor = 'rgba(255,102,184,0.5)';
+  ctx.shadowBlur  = 8*d;
+  const bandT = 0.42; // position along barrel
+  const bandX = breechX + Math.cos(angle)*barrelLen*bandT;
+  const bandY = breechY + Math.sin(angle)*barrelLen*bandT;
+  const bandR = breechR - (breechR-muzzleR)*bandT + 3*d;
+  ctx.strokeStyle = '#ffbbee';
+  ctx.lineWidth = 4*d;
+  ctx.beginPath();
+  ctx.moveTo(bandX + bpx*bandR, bandY + bpy*bandR);
+  ctx.lineTo(bandX - bpx*bandR, bandY - bpy*bandR);
+  ctx.stroke();
+
+  // Breech cap (round end at back)
+  ctx.shadowColor = 'rgba(255,102,184,0.7)';
+  ctx.shadowBlur  = 12*d;
+  const breechCapGrad = ctx.createRadialGradient(breechX-4*d, breechY-4*d, 1*d, breechX, breechY, breechR);
+  breechCapGrad.addColorStop(0, '#ffbbee');
+  breechCapGrad.addColorStop(1, '#8a1060');
+  ctx.fillStyle = breechCapGrad;
+  ctx.beginPath();
+  ctx.arc(breechX, breechY, breechR, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#ffaadd';
+  ctx.lineWidth = 2*d;
+  ctx.stroke();
+  // Pig emoji on breech
+  ctx.shadowBlur = 0;
+  ctx.font = `${18*d}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🐷', breechX, breechY);
+
+  // Muzzle cap (slightly flared)
+  ctx.shadowColor = 'rgba(255,102,184,0.5)';
+  ctx.shadowBlur  = 8*d;
+  ctx.strokeStyle = '#ff99d4';
+  ctx.lineWidth = 3*d;
+  ctx.beginPath();
+  ctx.moveTo(m1x + bpx*3*d, m1y + bpy*3*d);
+  ctx.lineTo(m2x - bpx*3*d, m2y - bpy*3*d);
+  ctx.stroke();
 
   ctx.restore();
+}
+
+// Barrel tip world position for pig launch (must match drawCannon geometry)
+function cannonTipWorld() {
+  const d = dpr();
+  const angle = -0.30;
+  const barrelLen = 110*d;
+  const bx = CANNON_WORLD_X*d + 148*d - 10*d; // breechX in world space
+  const by_screen_rel = -18*d; // relative to wy, calculated at launch time
+  return { angle, barrelLen, bx, breechOffY: by_screen_rel };
 }
 
 // ---- LAUNCH ----
@@ -275,12 +376,14 @@ function launch(){
   const h=canvas.height;
   const ground=h-40*dpr();
   const d=dpr();
-  const angle=-0.32;
-  const barrelLen=90*d;
-  const bx=CANNON_WORLD_X*d+175*d;
-  const by=ground-22*d-36*d*0.55;
-  const startWX=bx+Math.cos(angle)*barrelLen;
-  const startY=by+Math.sin(angle)*barrelLen;
+  const wheelR=38*d;
+  const wy=ground-wheelR;
+  const angle=-0.30;
+  const barrelLen=110*d;
+  const breechX=CANNON_WORLD_X*d+148*d-10*d;
+  const breechY=wy-18*d;
+  const startWX=breechX+Math.cos(angle)*barrelLen;
+  const startY=breechY+Math.sin(angle)*barrelLen;
 
   const targetZone=Math.floor(Math.random()*zones.length);
   const zoneLeft=zoneStartWorld(targetZone);
