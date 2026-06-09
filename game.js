@@ -153,88 +153,77 @@ function showResult(z,zIdx){
 }
 
 // ---- DRAW CANNON ----
-// pivot = tip of barrel in world coords; draws behind it
 function drawCannon(sx, groundY) {
   const d = dpr();
-  const angle = -0.32; // barrel angle upward (radians)
+  const angle = -0.32; // upward angle in radians (~18 deg)
   const barrelLen = 90*d;
-  const barrelW  = 28*d;
-  const baseR    = 36*d; // main body circle radius
-  const wheelR   = 22*d;
+  const barrelW   = 28*d;
+  const baseR     = 36*d;
+  const wheelR    = 22*d;
 
-  // pivot point = where barrel tip exits (launch point)
-  const tipX = sx + 175*d;
-  const tipY = groundY - 58*d;
+  // cannon body center — sits just above the axle
+  const bx = sx + 175*d;
+  const by = groundY - wheelR - baseR*0.55;
 
-  // barrel base center (back of barrel)
-  const bx = tipX - Math.cos(angle)*barrelLen;
-  const by = tipY + Math.sin(angle)*barrelLen;
+  // barrel tip: extends right+up from body center
+  const tipX = bx + Math.cos(angle)*barrelLen;
+  const tipY = by + Math.sin(angle)*barrelLen;
 
   ctx.save();
 
-  // --- glow ---
-  ctx.shadowColor = 'rgba(255,102,184,.7)';
-  ctx.shadowBlur  = 20*d;
-
-  // --- barrel ---
+  // --- barrel (no arc, just a rounded rectangle) ---
   ctx.save();
-  ctx.translate(tipX, tipY);
-  ctx.rotate(angle + Math.PI); // point barrel rightward
-  const barrelGrad = ctx.createLinearGradient(0,-barrelW/2, 0,barrelW/2);
-  barrelGrad.addColorStop(0,  '#cc55aa');
-  barrelGrad.addColorStop(0.4,'#ff66b8');
-  barrelGrad.addColorStop(1,  '#7a1a55');
+  ctx.translate(bx, by);
+  ctx.rotate(angle);
+  const barrelGrad = ctx.createLinearGradient(0, -barrelW/2, 0, barrelW/2);
+  barrelGrad.addColorStop(0,   '#cc55aa');
+  barrelGrad.addColorStop(0.4, '#ff66b8');
+  barrelGrad.addColorStop(1,   '#7a1a55');
   ctx.fillStyle = barrelGrad;
-  // barrel body
+  ctx.shadowColor = 'rgba(255,102,184,.7)';
+  ctx.shadowBlur  = 18*d;
   ctx.beginPath();
-  ctx.roundRect(0, -barrelW/2, barrelLen, barrelW, [barrelW/2, 8*d, 8*d, barrelW/2]);
+  ctx.roundRect(0, -barrelW/2, barrelLen, barrelW, [4*d, 10*d, 10*d, 4*d]);
   ctx.fill();
-  // barrel shine
+  // shine strip
+  ctx.shadowBlur = 0;
   ctx.fillStyle = 'rgba(255,255,255,.18)';
   ctx.beginPath();
-  ctx.roundRect(6*d, -barrelW/2+4*d, barrelLen-12*d, barrelW*0.3, 4*d);
-  ctx.fill();
-  // muzzle ring
-  ctx.strokeStyle = '#ff9cd8';
-  ctx.lineWidth = 4*d;
-  ctx.beginPath();
-  ctx.arc(barrelLen, 0, barrelW/2+2*d, 0, Math.PI*2);
-  ctx.stroke();
-  ctx.fillStyle = '#1a0828';
+  ctx.roundRect(6*d, -barrelW/2+4*d, barrelLen-12*d, barrelW*0.28, 4*d);
   ctx.fill();
   ctx.restore();
 
-  // --- cannon body (round base) ---
+  // --- cannon body circle ---
+  ctx.shadowColor = 'rgba(255,102,184,.7)';
+  ctx.shadowBlur  = 20*d;
   const bodyGrad = ctx.createRadialGradient(bx-8*d, by-8*d, 4*d, bx, by, baseR);
-  bodyGrad.addColorStop(0,  '#ff66b8');
-  bodyGrad.addColorStop(0.6,'#a0206a');
-  bodyGrad.addColorStop(1,  '#4a0830');
+  bodyGrad.addColorStop(0,   '#ff66b8');
+  bodyGrad.addColorStop(0.6, '#a0206a');
+  bodyGrad.addColorStop(1,   '#4a0830');
   ctx.fillStyle = bodyGrad;
   ctx.beginPath();
   ctx.arc(bx, by, baseR, 0, Math.PI*2);
   ctx.fill();
-  // body ring
   ctx.strokeStyle = '#ff9cd8';
   ctx.lineWidth = 3*d;
   ctx.stroke();
-  // pig emoji on body
+  // pig on body
   ctx.shadowBlur = 0;
   ctx.font = `${22*d}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('🐷', bx, by);
 
+  // --- carriage / axle ---
   ctx.shadowColor = 'rgba(90,208,255,.5)';
   ctx.shadowBlur  = 14*d;
-
-  // --- carriage / axle ---
-  const axleY = groundY - wheelR;
-  const axleX1 = bx - 30*d;
-  const axleX2 = bx + 28*d;
+  const axleY  = groundY - wheelR;
+  const axleX1 = bx - 32*d;
+  const axleX2 = bx + 30*d;
   const carriageGrad = ctx.createLinearGradient(axleX1, 0, axleX2, 0);
-  carriageGrad.addColorStop(0, '#1a4a7a');
-  carriageGrad.addColorStop(0.5,'#5ad0ff');
-  carriageGrad.addColorStop(1, '#1a4a7a');
+  carriageGrad.addColorStop(0,   '#1a4a7a');
+  carriageGrad.addColorStop(0.5, '#5ad0ff');
+  carriageGrad.addColorStop(1,   '#1a4a7a');
   ctx.fillStyle = carriageGrad;
   ctx.beginPath();
   ctx.roundRect(axleX1, axleY - 8*d, axleX2-axleX1, 16*d, 6*d);
@@ -242,11 +231,10 @@ function drawCannon(sx, groundY) {
 
   // --- wheels ---
   function drawWheel(cx, cy) {
-    // outer tire
     const wg = ctx.createRadialGradient(cx-wheelR*0.3, cy-wheelR*0.3, 2*d, cx, cy, wheelR);
-    wg.addColorStop(0,  '#4a9acc');
-    wg.addColorStop(0.7,'#1a5580');
-    wg.addColorStop(1,  '#0a2a40');
+    wg.addColorStop(0,   '#4a9acc');
+    wg.addColorStop(0.7, '#1a5580');
+    wg.addColorStop(1,   '#0a2a40');
     ctx.fillStyle = wg;
     ctx.beginPath();
     ctx.arc(cx, cy, wheelR, 0, Math.PI*2);
@@ -254,18 +242,17 @@ function drawCannon(sx, groundY) {
     ctx.strokeStyle = '#5ad0ff';
     ctx.lineWidth = 3*d;
     ctx.stroke();
-    // spokes
     ctx.strokeStyle = 'rgba(90,208,255,.6)';
     ctx.lineWidth = 2*d;
     for(let s=0;s<6;s++){
-      const a = (s/6)*Math.PI*2;
+      const a=(s/6)*Math.PI*2;
       ctx.beginPath();
       ctx.moveTo(cx,cy);
       ctx.lineTo(cx+Math.cos(a)*(wheelR-4*d), cy+Math.sin(a)*(wheelR-4*d));
       ctx.stroke();
     }
-    // hub
     ctx.fillStyle = '#5ad0ff';
+    ctx.shadowBlur = 0;
     ctx.beginPath();
     ctx.arc(cx, cy, 6*d, 0, Math.PI*2);
     ctx.fill();
@@ -287,16 +274,21 @@ function launch(){
 
   const h=canvas.height;
   const ground=h-40*dpr();
-  const startWX=CANNON_WORLD_X*dpr()+175*dpr();
-  const startY=h-58*dpr(); // matches barrel tip height
+  const d=dpr();
+  const angle=-0.32;
+  const barrelLen=90*d;
+  const bx=CANNON_WORLD_X*d+175*d;
+  const by=ground-22*d-36*d*0.55;
+  const startWX=bx+Math.cos(angle)*barrelLen;
+  const startY=by+Math.sin(angle)*barrelLen;
 
   const targetZone=Math.floor(Math.random()*zones.length);
   const zoneLeft=zoneStartWorld(targetZone);
-  const margin=ZONE_W*dpr()*0.2;
-  const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*dpr()-margin);
+  const margin=ZONE_W*d*0.2;
+  const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*d-margin);
 
-  const g=0.04*dpr();           // very slow floaty gravity
-  const vy0=rnd(-3,-2)*dpr();   // gentle upward launch
+  const g=0.04*d;
+  const vy0=rnd(-3,-2)*d;
   const a=0.5*g, b=vy0, c=startY-ground;
   const disc=b*b-4*a*c;
   const t=(-b+Math.sqrt(disc))/(2*a);
@@ -305,10 +297,10 @@ function launch(){
   pig={
     wx:startWX, y:startY,
     vx, vy:vy0,
-    r:18*dpr(), spin:0, trail:[],
+    r:18*d, spin:0, trail:[],
     bounces:0
   };
-  camX=CANNON_WORLD_X*dpr();
+  camX=CANNON_WORLD_X*d;
   targetCamX=camX;
 }
 
@@ -321,7 +313,7 @@ function update(){
   camX+=(targetCamX-camX)*0.04;
   if(!pig)return;
 
-  pig.vy+=0.04*dpr(); // match gravity from launch()
+  pig.vy+=0.04*dpr();
   pig.wx+=pig.vx;
   pig.y+=pig.vy;
   pig.spin+=pig.vx*0.08;
@@ -407,7 +399,6 @@ function draw(){
     ctx.fillText(zones[i].amount,sx+zw/2,ground+33*dpr());
   }
 
-  // draw the real cannon
   drawCannon(worldToScreen(CANNON_WORLD_X*dpr()), ground);
 
   if(pig){
