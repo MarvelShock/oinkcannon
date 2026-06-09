@@ -171,8 +171,8 @@ function launch(){
   const margin=ZONE_W*dpr()*0.2;
   const targetWX=rnd(zoneLeft+margin, zoneLeft+ZONE_W*dpr()-margin);
 
-  const g=0.14*dpr();           // must match update() gravity
-  const vy0=rnd(-7,-4)*dpr();   // slow-mo arc height
+  const g=0.07*dpr();           // reduced gravity for slower, floatier arc
+  const vy0=rnd(-4,-2.5)*dpr(); // slower upward launch speed
   const a=0.5*g, b=vy0, c=startY-ground;
   const disc=b*b-4*a*c;
   const t=(-b+Math.sqrt(disc))/(2*a);
@@ -197,7 +197,7 @@ function update(){
   camX+=(targetCamX-camX)*0.04;
   if(!pig)return;
 
-  pig.vy+=0.14*dpr();
+  pig.vy+=0.07*dpr(); // match reduced gravity from launch()
   pig.wx+=pig.vx;
   pig.y+=pig.vy;
   pig.spin+=pig.vx*0.08;
