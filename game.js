@@ -181,8 +181,8 @@ function launch(){
   // 3. Pick a random launch angle (vy) and derive vx from projectile formula.
   //    y(t) = startY + vy*t + 0.5*g*t^2 = ground  =>  solve for t at landing
   //    x(t) = startWX + vx*t = targetWX  =>  vx = (targetWX - startWX) / t
-  const g=0.45*dpr();           // must match update() gravity
-  const vy0=rnd(-18,-11)*dpr(); // random arc height
+  const g=0.28*dpr();           // must match update() gravity
+  const vy0=rnd(-12,-7)*dpr(); // random arc height
   // Quadratic: 0.5*g*t^2 + vy0*t + (startY-ground) = 0
   const a=0.5*g, b=vy0, c=startY-ground;
   const disc=b*b-4*a*c;
@@ -208,7 +208,7 @@ function update(){
   camX+=(targetCamX-camX)*0.07;
   if(!pig)return;
 
-  pig.vy+=0.45*dpr();
+  pig.vy+=0.28*dpr();
   pig.wx+=pig.vx;
   pig.y+=pig.vy;
   pig.spin+=pig.vx*0.08;
