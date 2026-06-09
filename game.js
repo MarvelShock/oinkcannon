@@ -7,10 +7,7 @@ const togglePanelBtn=document.getElementById('togglePanelBtn');
 const panel=document.getElementById('panel');
 const resultOverlay=document.getElementById('resultOverlay');
 const resultText=document.getElementById('resultText');
-const twitchBtn=document.getElementById('twitchBtn');
-const twitchBar=document.getElementById('twitchBar');
-const twitchStatus=document.getElementById('twitchStatus');
-const twitchDisconnectBtn=document.getElementById('twitchDisconnectBtn');
+const twitchPill=document.getElementById('twitchPill');
 let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
 let holdCamFrames=0;
@@ -50,74 +47,72 @@ const defaults=[
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
 
-// ---- TWITCH IRC ----
-const TWITCH_CLIENT_ID = 'f6q91oc8nmrz0a15413wbjuezzyr2v';
-const TWITCH_CHANNEL   = 'thenicolet';
+// ---- TWITCH IRC (auto-connect, allowlist) ----
+const TWITCH_CHANNEL = 'thenicolet';
+const ALLOWED_USERS  = ['tyler25', 'thenicolet']; // case-insensitive
 let twitchWS = null;
 let twitchPingInterval = null;
-// Queue: one launch pending at a time, 3s cooldown between launches
-let launchQueue = [];
 let launchCooldown = false;
+
+function setPillConnected() {
+  twitchPill.className = 'twitch-pill connected';
+  twitchPill.innerHTML = '🟢 Live in #' + TWITCH_CHANNEL + ' &mdash; !oink to launch <button id="twitchDisBtn" title="Disconnect">✕</button>';
+  document.getElementById('twitchDisBtn').onclick = twitchDisconnect;
+}
+function setPillConnecting() {
+  twitchPill.className = 'twitch-pill';
+  twitchPill.textContent = '🟡 Connecting...';
+}
+function setPillDisconnected() {
+  twitchPill.className = 'twitch-pill';
+  twitchPill.textContent = '🔴 Disconnected';
+}
 
 function twitchConnect(){
   if(twitchWS && twitchWS.readyState < 2) return;
+  setPillConnecting();
   twitchWS = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
   twitchWS.onopen = () => {
     twitchWS.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
-    // Anonymous read-only login — no OAuth needed for public chat
     twitchWS.send('PASS SCHMOOPIIE');
     twitchWS.send('NICK justinfan' + Math.floor(Math.random()*99999));
     twitchWS.send('JOIN #' + TWITCH_CHANNEL);
-    twitchBar.classList.remove('hidden');
-    twitchStatus.textContent = '🟡 Connecting to #' + TWITCH_CHANNEL + '...';
-    twitchPingInterval = setInterval(()=>{ if(twitchWS.readyState===1) twitchWS.send('PING :tmi.twitch.tv'); }, 4*60*1000);
+    twitchPingInterval = setInterval(()=>{ if(twitchWS && twitchWS.readyState===1) twitchWS.send('PING :tmi.twitch.tv'); }, 4*60*1000);
   };
   twitchWS.onmessage = (e) => {
     const raw = e.data;
     if(raw.includes('PING')) { twitchWS.send('PONG :tmi.twitch.tv'); return; }
-    if(raw.includes('366') || raw.includes('JOIN #' + TWITCH_CHANNEL)){
-      twitchStatus.textContent = '🟢 Live in #' + TWITCH_CHANNEL + ' — type !oink to launch!';
-      twitchBtn.textContent = '🟢 Twitch Live';
-    }
-    // Parse PRIVMSG
+    if(raw.includes('366')) setPillConnected();
     const privMatch = raw.match(/PRIVMSG #\S+ :(.+)/);
-    if(privMatch){
-      const msg = privMatch[1].trim().toLowerCase();
-      const userMatch = raw.match(/display-name=([^;]+)/);
-      const user = userMatch ? userMatch[1] : 'viewer';
-      if(msg === '!oink' || msg.startsWith('!oink ')){
-        queueLaunch(user);
-      }
+    if(!privMatch) return;
+    const msg = privMatch[1].trim().toLowerCase();
+    const userMatch = raw.match(/display-name=([^;]+)/);
+    const user = userMatch ? userMatch[1].trim() : '';
+    // Allowlist check
+    if(!ALLOWED_USERS.includes(user.toLowerCase())) return;
+    if(msg === '!oink' || msg.startsWith('!oink ')){
+      if(launchCooldown) return;
+      launchCooldown = true;
+      lastResult.textContent = user + ' fired the cannon! 🐷';
+      getAC();
+      launch();
+      setTimeout(()=>{ launchCooldown=false; }, 3500);
     }
   };
   twitchWS.onclose = () => {
-    twitchStatus.textContent = '🔴 Disconnected';
-    twitchBtn.textContent = '🟣 Connect Twitch';
     clearInterval(twitchPingInterval);
+    setPillDisconnected();
+    setTimeout(twitchConnect, 8000); // auto-reconnect
   };
-  twitchWS.onerror = () => {
-    twitchStatus.textContent = '🔴 Connection error';
-  };
+  twitchWS.onerror = () => {};
 }
 
 function twitchDisconnect(){
-  if(twitchWS){ twitchWS.close(); twitchWS=null; }
-  clearInterval(twitchPingInterval);
-  twitchBar.classList.add('hidden');
-  twitchBtn.textContent = '🟣 Connect Twitch';
+  if(twitchWS){ twitchWS.onclose=()=>{ clearInterval(twitchPingInterval); setPillDisconnected(); }; twitchWS.close(); twitchWS=null; }
 }
 
-function queueLaunch(user){
-  if(launchCooldown) return; // one at a time, drop extras during cooldown
-  launchCooldown = true;
-  lastResult.textContent = user + ' fired the cannon! 🐷';
-  getAC();
-  launch();
-  setTimeout(()=>{ launchCooldown=false; }, 3500);
-}
-
-twitchBtn.onclick = twitchConnect;
-twitchDisconnectBtn.onclick = twitchDisconnect;
+// Auto-connect on load
+twitchConnect();
 
 // ---- AUDIO ----
 function getAC(){
