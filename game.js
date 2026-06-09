@@ -11,7 +11,7 @@ let soundOn=true,running=false,pig=null,sparkles=[];
 let resultTimer=null;
 
 const ZONE_W=240;
-const CANNON_WORLD_X=-1200;
+const CANNON_WORLD_X=-1800;
 function dpr(){return devicePixelRatio||1;}
 function resize(){canvas.width=canvas.clientWidth*dpr();canvas.height=canvas.clientHeight*dpr();}
 window.addEventListener('resize',resize);resize();
