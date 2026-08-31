@@ -37,12 +37,12 @@ function getMuzzleWorld(){
 }
 
 const defaults=[
-  {name:'5 Subs',        amount:'\ud83c\udf89 5 Subs',              sub:['5','5','5','5','5']},
-  {name:'10 Subs',       amount:'\ud83c\udf8a 10 Subs',             sub:['10','10','10','10','10']},
-  {name:'15 Subs',       amount:'\u2728 15 Subs',              sub:['15','15','15','15','15']},
-  {name:'25 Subs',       amount:'\ud83d\udc37 25 Subs',             sub:['25','25','25','25','25']},
-  {name:'Gift Your Age', amount:'\ud83c\udf82 Gift Your Age',       sub:['age','age','age','age','age']},
-  {name:'Pushup Gifting',amount:'\ud83d\udcaa Gift = Your Pushups', sub:['pushups','pushups','pushups','pushups','pushups']}
+  {name:'1 Sub',   amount:'🎉 1 Sub',   sub:['1','1','1','1','1']},
+  {name:'2 Subs',  amount:'🎊 2 Subs',  sub:['2','2','2','2','2']},
+  {name:'5 Subs',  amount:'✨ 5 Subs',  sub:['5','5','5','5','5']},
+  {name:'10 Subs', amount:'🐷 10 Subs', sub:['10','10','10','10','10']},
+  {name:'1 Sub',   amount:'🎂 1 Sub',   sub:['1','1','1','1','1']},
+  {name:'3 Subs',  amount:'💪 3 Subs',  sub:['3','3','3','3','3']}
 ];
 const zones=JSON.parse(localStorage.getItem('oinkZones')||'null')||defaults;
 function saveZones(){localStorage.setItem('oinkZones',JSON.stringify(zones));}
